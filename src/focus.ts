@@ -32,7 +32,7 @@ const RECLAIM_CHECK_MS = [700, 1600];
 
 /**
  * Handle a toast click delivered as a vscode:// URI:
- *   vscode://adev.vscode-claude-toasts/focus?session=<id>
+ *   vscode://duron.vscode-claude-toasts/focus?session=<id>
  *
  * VS Code routes the URI to this window, but it does not raise it: Windows gives
  * foreground rights to the Code.exe that the shell spawned to forward the URI,

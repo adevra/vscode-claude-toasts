@@ -26,7 +26,7 @@ import { SessionRegistry } from "./sessionRegistry";
 import { StatusBar } from "./statusBar";
 import { HookEvent, PolicyContext, ToastAction } from "./types";
 
-const EXT_ID = "adev.vscode-claude-toasts";
+const EXT_ID = "duron.vscode-claude-toasts";
 const APP_ID = "ClaudeCode.VSCodeToasts";
 const APP_DISPLAY_NAME = "Claude Code";
 const PERMISSION_WAIT_MS = 25000;

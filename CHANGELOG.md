@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.3
+
+- Publisher changed to duron; extension id is now duron.vscode-claude-toasts.
+  Hooks and assets migrate automatically on first activation (the installer
+  self-heals paths into the new globalStorage location).
+
 ## 0.5.2
 
 - Extension category corrected to Other (was wrongly listed under Notebooks).
