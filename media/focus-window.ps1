@@ -17,7 +17,10 @@ param(
 #
 # The catch is Windows foreground lock: a background process may not call
 # SetForegroundWindow. There is no single workaround that always works, so we walk
-# a ladder from politest to most forceful and report which rung succeeded
+# a ladder from politest to most forceful and report which rung succeeded.
+# Deliberately excluded: temporarily zeroing SPI_SETFOREGROUNDLOCKTIMEOUT. It
+# mutates a system-wide setting, and its pvParam is the value itself rather than
+# a pointer - easy to corrupt, and not worth it for a notification.
 # (strategy=...) so the extension log shows what this machine actually honors.
 #
 # One Code.exe process owns every window, so windows are identified by title, not
@@ -46,7 +49,6 @@ public class CtWin {
   [DllImport("user32.dll")] public static extern IntPtr SetFocus(IntPtr hWnd);
   [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
   [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
-  [DllImport("user32.dll")] public static extern bool SystemParametersInfo(uint action, uint param, ref uint vparam, uint winini);
   [DllImport("user32.dll")] public static extern bool AllowSetForegroundWindow(int pid);
   [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowTextLength(IntPtr hWnd);
@@ -72,9 +74,6 @@ $SWP_NOSIZE = 0x0001
 $SWP_SHOWWINDOW = 0x0040
 $VK_MENU = 0x12
 $KEYEVENTF_KEYUP = 0x0002
-$SPI_GETFOREGROUNDLOCKTIMEOUT = 0x2000
-$SPI_SETFOREGROUNDLOCKTIMEOUT = 0x2001
-$SPIF_SENDCHANGE = 0x0002
 
 function Test-Foreground([IntPtr]$h) { return ([CtWin]::GetForegroundWindow() -eq $h) }
 
@@ -122,25 +121,14 @@ function Raise-Window([IntPtr]$h) {
     if (Test-Foreground $h) { return "altkey" }
   }
 
-  # 5. Drop the system foreground-lock timeout, activate, then put it back.
-  $old = [uint32]0
-  if ($StartAt -le 5 -and [CtWin]::SystemParametersInfo($SPI_GETFOREGROUNDLOCKTIMEOUT, 0, [ref]$old, 0)) {
-    $zero = [uint32]0
-    [void][CtWin]::SystemParametersInfo($SPI_SETFOREGROUNDLOCKTIMEOUT, 0, [ref]$zero, $SPIF_SENDCHANGE)
-    [void][CtWin]::SetForegroundWindow($h)
-    $restore = $old
-    [void][CtWin]::SystemParametersInfo($SPI_SETFOREGROUNDLOCKTIMEOUT, 0, [ref]$restore, $SPIF_SENDCHANGE)
-    if (Test-Foreground $h) { return "locktimeout" }
-  }
-
-  # 6. Topmost flicker: at least lift it above everything visually.
-  if ($StartAt -le 6) {
+  # 5. Topmost flicker: at least lift it above everything visually.
+  if ($StartAt -le 5) {
   [void][CtWin]::SetWindowPos($h, $HWND_TOPMOST, 0, 0, 0, 0, $SWP_NOMOVE -bor $SWP_NOSIZE -bor $SWP_SHOWWINDOW)
   [void][CtWin]::SetWindowPos($h, $HWND_NOTOPMOST, 0, 0, 0, 0, $SWP_NOMOVE -bor $SWP_NOSIZE -bor $SWP_SHOWWINDOW)
   if (Test-Foreground $h) { return "topmost" }
   }
 
-  # 7. Last resort: a restore from minimized always activates.
+  # 6. Last resort: a restore from minimized always activates.
   [void][CtWin]::ShowWindow($h, $SW_MINIMIZE)
   [void][CtWin]::ShowWindow($h, $SW_RESTORE)
   if (Test-Foreground $h) { return "minimizerestore" }

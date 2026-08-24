@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.3
+
+- Removed the foreground-lock-timeout strategy from the window-raise ladder. It
+  mutated a system-wide setting, and SPI_SETFOREGROUNDLOCKTIMEOUT takes its value
+  in pvParam rather than a pointer to it - passing a reference set the live
+  timeout to a pointer address, which would have blocked focus changes system
+  wide. The remaining strategies (altkey, topmost, minimizerestore) each raise the
+  window on their own and touch no global state.
+
 ## 0.2.2
 
 - Each rung of the window-raise ladder is now individually verified; a -StartAt
