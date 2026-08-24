@@ -8,10 +8,19 @@ export interface HookEvent {
   ts: number;
   notification_type?: string | null;
   tool_name?: string | null;
+  /** Short human-readable summary of the tool input (command, file path, ...). */
+  tool_summary?: string | null;
+  tool_use_id?: string | null;
   last_assistant_message?: string | null;
 }
 
-export type ToastKind = "complete" | "needs-input";
+/** A button on a toast. Protocol activation: `uri` is opened when clicked. */
+export interface ToastAction {
+  content: string;
+  uri: string;
+}
+
+export type ToastKind = "complete" | "needs-input" | "permission";
 export type Urgency = "normal" | "high";
 
 /** A resolved intent to show one toast. Platform-agnostic. */
@@ -24,6 +33,8 @@ export interface Decision {
   sessionId: string;
   /** Collapses repeats: same session + kind share a key. */
   dedupKey: string;
+  /** Buttons rendered on the toast. */
+  actions?: ToastAction[];
 }
 
 export type PolicyResult =
@@ -56,6 +67,8 @@ export interface PolicyContext {
    * finished, repeating "waiting for your input" adds nothing.
    */
   completedToastShownThisTurn?: boolean;
+  /** True while this session (or everything) is muted; suppresses all toasts. */
+  muted?: boolean;
   config: PolicyConfig;
 }
 

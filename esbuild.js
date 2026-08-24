@@ -12,6 +12,7 @@ function copyAssets() {
     ["hook/hook.js", "dist/claude-toasts-hook.js"],
     ["media/show-toast.ps1", "dist/show-toast.ps1"],
     ["media/focus-window.ps1", "dist/focus-window.ps1"],
+    ["media/hide-toast.ps1", "dist/hide-toast.ps1"],
     ["media/icon.png", "dist/icon.png"],
   ];
   for (const [from, to] of assets) {

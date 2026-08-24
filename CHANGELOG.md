@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.0
+
+- **Approve or deny a permission request straight from the toast.** Permission
+  toasts now show the actual command ("Bash: rm -rf build") with Allow / Deny
+  buttons. PermissionRequest is installed as a blocking hook and the pipe grew a
+  request/response path so the decision reaches Claude Code. Safe by design: if
+  you are at that terminal, notifications are off, the session is muted, nothing
+  answers in time, or the window closes, it escalates to Claude's own prompt.
+- **Mute buttons.** Every toast carries "Mute 30m" for that session.
+- Answered permission toasts are removed from the Action Center instead of
+  lingering with dead buttons.
+- Fix: closing a window no longer left a blocked hook waiting for its timeout -
+  the pipe server now destroys live connections on dispose.
+
 ## 0.1.5
 
 - Window raise now disambiguates when several windows share a folder name. The

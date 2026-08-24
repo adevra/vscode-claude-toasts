@@ -12,8 +12,11 @@ export interface HookServerHandle {
   dispose(): void;
 }
 
+/** Write a JSON reply back to the waiting hook process. Safe to call once. */
+export type Respond = (payload: unknown) => void;
+
 export interface HookServerCallbacks {
-  onEvent(event: HookEvent): void;
+  onEvent(event: HookEvent, respond: Respond): void;
   /** Diagnostics: dropped lines, parse errors, etc. */
   onLog(message: string): void;
 }
@@ -31,8 +34,21 @@ export function startHookServer(cb: HookServerCallbacks): HookServerHandle {
       ? `\\\\.\\pipe\\claude-toasts-${id}`
       : `/tmp/claude-toasts-${id}.sock`;
 
+  const open = new Set<net.Socket>();
   const server = net.createServer((socket) => {
+    open.add(socket);
+    socket.on("close", () => open.delete(socket));
     let buffer = "";
+    let replied = false;
+    const respond: Respond = (payload) => {
+      if (replied || socket.destroyed) return;
+      replied = true;
+      try {
+        socket.end(JSON.stringify(payload) + "\n");
+      } catch {
+        /* hook already gone */
+      }
+    };
     socket.setEncoding("utf8");
     socket.on("data", (chunk: string) => {
       buffer += chunk;
@@ -43,7 +59,7 @@ export function startHookServer(cb: HookServerCallbacks): HookServerHandle {
       while ((idx = buffer.indexOf("\n")) >= 0) {
         const line = buffer.slice(0, idx);
         buffer = buffer.slice(idx + 1);
-        handleLine(line, token, cb);
+        handleLine(line, token, cb, respond);
       }
     });
     socket.on("error", () => {
@@ -58,6 +74,17 @@ export function startHookServer(cb: HookServerCallbacks): HookServerHandle {
     pipePath,
     token,
     dispose() {
+      // Destroy live connections too: a hook blocked on a PermissionRequest must
+      // learn immediately that this window is gone, so Claude Code falls through
+      // to its own prompt instead of waiting out the timeout.
+      for (const socket of open) {
+        try {
+          socket.destroy();
+        } catch {
+          /* ignore */
+        }
+      }
+      open.clear();
       try {
         server.close();
       } catch {
@@ -67,7 +94,7 @@ export function startHookServer(cb: HookServerCallbacks): HookServerHandle {
   };
 }
 
-function handleLine(line: string, token: string, cb: HookServerCallbacks): void {
+function handleLine(line: string, token: string, cb: HookServerCallbacks, respond: Respond): void {
   const trimmed = line.trim();
   if (!trimmed) return;
   if (trimmed.length > MAX_LINE_BYTES) {
@@ -85,15 +112,20 @@ function handleLine(line: string, token: string, cb: HookServerCallbacks): void 
     cb.onLog("dropped line with bad token");
     return;
   }
-  cb.onEvent({
-    hook_event_name: str(obj.hook_event_name),
-    session_id: str(obj.session_id),
-    cwd: str(obj.cwd),
-    ts: typeof obj.ts === "number" ? obj.ts : Date.now(),
-    notification_type: str(obj.notification_type),
-    tool_name: str(obj.tool_name),
-    last_assistant_message: str(obj.last_assistant_message),
-  });
+  cb.onEvent(
+    {
+      hook_event_name: str(obj.hook_event_name),
+      session_id: str(obj.session_id),
+      cwd: str(obj.cwd),
+      ts: typeof obj.ts === "number" ? obj.ts : Date.now(),
+      notification_type: str(obj.notification_type),
+      tool_name: str(obj.tool_name),
+      tool_summary: str(obj.tool_summary),
+      tool_use_id: str(obj.tool_use_id),
+      last_assistant_message: str(obj.last_assistant_message),
+    },
+    respond,
+  );
 }
 
 function str(v: unknown): string | null {

@@ -47,6 +47,19 @@ export class WindowsNotifier implements Notifier {
     });
   }
 
+  hide(tag: string): Promise<void> {
+    const args = [
+      "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+      path.join(this.deps.assetDir, "hide-toast.ps1"),
+      "-AppId", this.deps.appId,
+      "-Tag", shortTag(tag),
+      "-Group", GROUP,
+    ];
+    return new Promise<void>((resolve) => {
+      execFile(POWERSHELL, args, { timeout: SHOW_TIMEOUT_MS, windowsHide: true }, () => resolve());
+    });
+  }
+
   dispose(): void {
     /* stateless */
   }
@@ -71,6 +84,17 @@ export function buildToastXml(req: ToastRequest, iconPath?: string): string {
   const audio = req.sound ? "" : '\n  <audio silent="true"/>';
   const title = xmlEscape(req.title);
   const body = xmlEscape(req.body || " ");
+  const actions =
+    req.actions && req.actions.length > 0
+      ? "\n  <actions>\n" +
+        req.actions
+          .map(
+            (a) =>
+              `    <action content="${xmlEscape(a.content)}" activationType="protocol" arguments="${xmlEscape(a.uri)}"/>`,
+          )
+          .join("\n") +
+        "\n  </actions>"
+      : "";
   const logo = iconPath
     ? `\n      <image placement="appLogoOverride" src="${xmlEscape(pathToFileURL(iconPath).href)}"/>`
     : "";
@@ -81,7 +105,7 @@ export function buildToastXml(req: ToastRequest, iconPath?: string): string {
     `      <text>${title}</text>\n` +
     `      <text>${body}</text>${logo}\n` +
     `    </binding>\n` +
-    `  </visual>${audio}\n` +
+    `  </visual>${actions}${audio}\n` +
     `</toast>`
   );
 }

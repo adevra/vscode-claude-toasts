@@ -27,6 +27,7 @@ const MAX_STDIN = 1_000_000;
 const MAX_MESSAGE_CHARS = 500;
 const CONNECT_TIMEOUT_MS = 600;
 const MAX_CANDIDATES = 8;
+const RESPONSE_TIMEOUT_MS = 25000;
 
 function main() {
   let raw = "";
@@ -110,6 +111,20 @@ function rankEntries(entries, cwd) {
   return scored.map((s) => s.entry);
 }
 
+/**
+ * One-line human summary of what a tool is about to do, so a permission toast can
+ * say "Bash: rm -rf build" instead of just "Bash". Only the fields that matter are
+ * read; everything else about the tool input stays inside Claude Code.
+ */
+function summarizeToolInput(input) {
+  if (!input || typeof input !== "object") return null;
+  const pick = input.command || input.file_path || input.path || input.pattern || input.url || input.prompt;
+  if (typeof pick === "string" && pick.trim()) {
+    return pick.trim().slice(0, MAX_MESSAGE_CHARS);
+  }
+  return null;
+}
+
 function buildLine(ev, token) {
   const msg =
     typeof ev.last_assistant_message === "string"
@@ -124,6 +139,8 @@ function buildLine(ev, token) {
       cwd: ev.cwd || null,
       notification_type: ev.notification_type || null,
       tool_name: ev.tool_name || null,
+      tool_summary: summarizeToolInput(ev.tool_input),
+      tool_use_id: ev.tool_use_id || null,
       last_assistant_message: msg,
     }) + "\n"
   );
@@ -153,9 +170,46 @@ function trySend(candidates, index, ev) {
   sock.on("error", next);
   sock.on("connect", () => {
     clearTimeout(timer);
-    sock.write(buildLine(ev, token), () => {
-      settled = true;
+    settled = true;
+    sock.write(buildLine(ev, token));
+
+    // PermissionRequest is the one event Claude Code waits on: the extension
+    // answers with allow / deny / escalate and we print that to stdout. If nothing
+    // arrives in time we print nothing, which Claude Code reads as "no decision"
+    // and falls through to its own permission prompt — never a hang.
+    if (ev.hook_event_name !== "PermissionRequest") {
       sock.end();
+      return process.exit(0);
+    }
+
+    let reply = "";
+    const giveUp = setTimeout(() => {
+      try {
+        sock.destroy();
+      } catch {
+        /* ignore */
+      }
+      process.exit(0);
+    }, RESPONSE_TIMEOUT_MS);
+    if (giveUp.unref) giveUp.unref();
+
+    sock.setEncoding("utf8");
+    sock.on("data", (chunk) => {
+      reply += chunk;
+      const nl = reply.indexOf("\n");
+      if (nl < 0) return;
+      clearTimeout(giveUp);
+      const line = reply.slice(0, nl).trim();
+      if (line) process.stdout.write(line + "\n");
+      try {
+        sock.destroy();
+      } catch {
+        /* ignore */
+      }
+      process.exit(0);
+    });
+    sock.on("close", () => {
+      clearTimeout(giveUp);
       process.exit(0);
     });
   });

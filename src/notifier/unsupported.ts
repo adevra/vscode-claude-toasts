@@ -10,6 +10,10 @@ export class UnsupportedNotifier implements Notifier {
     this.log(`no toast backend for ${this.platform}; would have shown: ${req.title} — ${req.body}`);
   }
 
+  async hide(): Promise<void> {
+    /* nothing was ever shown */
+  }
+
   dispose(): void {
     /* nothing to clean up */
   }

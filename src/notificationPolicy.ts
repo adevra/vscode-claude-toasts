@@ -6,13 +6,15 @@ import {
   PolicyConfig,
   PolicyContext,
   PolicyResult,
+  ToastAction,
 } from "./types";
 
 function suppressed(reason: string): PolicyResult {
   return { suppressed: true, reason };
 }
 
-function isUserWatching(ctx: PolicyContext): boolean {
+/** True when the person is demonstrably at this terminal right now. */
+export function isUserWatching(ctx: PolicyContext): boolean {
   return (
     ctx.config.suppressWhenActiveTerminal &&
     ctx.windowFocused &&
@@ -73,6 +75,9 @@ export function evaluateEvent(event: HookEvent, ctx: PolicyContext): PolicyResul
 
   if (!cfg.enabled) {
     return suppressed("extension disabled");
+  }
+  if (ctx.muted) {
+    return suppressed("muted");
   }
 
   switch (event.hook_event_name) {
@@ -150,4 +155,53 @@ export class ToastGate {
     this.emitTimes.push(now);
     return { ok: true };
   }
+}
+
+/**
+ * Plan for a PermissionRequest. Unlike other events this MUST produce an answer,
+ * because the hook is blocking Claude while it waits.
+ *
+ * "escalate" means: hand control back to Claude Code's own terminal prompt. That
+ * is the safe default for every case where a desktop toast would be wrong or
+ * useless — the person is already looking at the terminal, notifications are off,
+ * or the session is muted.
+ */
+export type PermissionPlan =
+  | { escalate: true; reason: string }
+  | { toast: Decision };
+
+export function evaluatePermissionRequest(
+  event: HookEvent,
+  ctx: PolicyContext,
+  actions: (sessionId: string) => ToastAction[],
+): PermissionPlan {
+  const cfg = ctx.config;
+  if (!cfg.enabled) {
+    return { escalate: true, reason: "extension disabled" };
+  }
+  if (!cfg.notifyOnNeedsInput) {
+    return { escalate: true, reason: "notifyOnNeedsInput is off" };
+  }
+  if (ctx.muted) {
+    return { escalate: true, reason: "muted" };
+  }
+  if (isUserWatching(ctx)) {
+    return { escalate: true, reason: "user is watching the session terminal" };
+  }
+
+  const sessionId = event.session_id ?? "unknown";
+  const tool = event.tool_name ?? "a tool";
+  const summary = preview(event.tool_summary, cfg.messagePreviewLength);
+  return {
+    toast: {
+      kind: "permission",
+      title: `Claude needs permission · ${ctx.folderName}`,
+      body: summary ? `${tool}: ${summary}` : `Allow ${tool}?`,
+      urgency: "high",
+      sticky: true,
+      sessionId,
+      dedupKey: `${sessionId}:permission:${event.tool_use_id ?? ""}`,
+      actions: actions(sessionId),
+    },
+  };
 }

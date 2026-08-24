@@ -1,5 +1,10 @@
+export interface ToastAction {
+  content: string;
+  uri: string;
+}
+
 export interface ToastRequest {
-  kind: "complete" | "needs-input";
+  kind: "complete" | "needs-input" | "permission";
   title: string;
   body: string;
   urgency: "normal" | "high";
@@ -9,11 +14,15 @@ export interface ToastRequest {
   tag: string;
   /** vscode:// URI opened when the toast is clicked (focuses window + terminal). */
   launchUri?: string;
+  /** Buttons; each opens its own vscode:// URI via protocol activation. */
+  actions?: ToastAction[];
 }
 
 export interface Notifier {
   readonly available: boolean;
   show(req: ToastRequest): Promise<void>;
+  /** Remove an already-shown toast from the Action Center by its tag. */
+  hide(tag: string): Promise<void>;
   dispose(): void;
 }
 

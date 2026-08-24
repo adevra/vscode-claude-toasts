@@ -5,7 +5,7 @@ import * as vscode from "vscode";
 import { registerAppId, unregisterAppId } from "./appRegistration";
 import { ExtensionConfig, readConfig } from "./config";
 import { handleFocusUri } from "./focus";
-import { startHookServer } from "./hookServer";
+import { Respond, startHookServer } from "./hookServer";
 import {
   HOOK_SCRIPT_BASENAME,
   installHooksToFile,
@@ -15,14 +15,16 @@ import {
 import { pruneDeadEntries, removeLiveEntry, writeLiveEntry } from "./liveRegistry";
 import { createNotifier } from "./notifier/factory";
 import { Notifier } from "./notifier/index";
-import { evaluateEvent, ToastGate } from "./notificationPolicy";
+import { evaluateEvent, evaluatePermissionRequest, ToastGate } from "./notificationPolicy";
+import { MuteStore } from "./muteStore";
 import { SessionRegistry } from "./sessionRegistry";
 import { StatusBar } from "./statusBar";
-import { HookEvent, PolicyContext } from "./types";
+import { HookEvent, PolicyContext, ToastAction } from "./types";
 
 const EXT_ID = "adev.vscode-claude-toasts";
 const APP_ID = "ClaudeCode.VSCodeToasts";
 const APP_DISPLAY_NAME = "Claude Code";
+const PERMISSION_WAIT_MS = 25000;
 const SETTINGS_PATH = path.join(os.homedir(), ".claude", "settings.json");
 
 let log!: vscode.OutputChannel;
@@ -34,6 +36,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   let cfg: ExtensionConfig = readConfig();
   const registry = new SessionRegistry();
   const gate = new ToastGate(cfg);
+  const mutes = new MuteStore();
+  const pendingPermissions = new Map<string, { respond: Respond; timer: NodeJS.Timeout; tag?: string }>();
+  let permissionSeq = 0;
   const statusBar = new StatusBar(registry);
   context.subscriptions.push(statusBar);
 
@@ -68,7 +73,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   // --- per-window pipe + terminal env injection -------------------------
   const server = startHookServer({
-    onEvent: (ev) => void processEvent(ev),
+    onEvent: (ev, respond) => void processEvent(ev, respond),
     onLog: (m) => log.appendLine(`[pipe] ${m}`),
   });
   context.subscriptions.push({ dispose: () => server.dispose() });
@@ -97,8 +102,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // --- URI handler: toast click -> focus terminal -----------------------
   context.subscriptions.push(
     vscode.window.registerUriHandler({
-      handleUri: (uri) =>
-        handleFocusUri(uri, { assetDir, registry, log: (m) => log.appendLine(`[focus] ${m}`) }),
+      handleUri: (uri) => routeUri(uri),
     }),
   );
 
@@ -140,7 +144,124 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   log.appendLine("activated");
 
-  async function processEvent(ev: HookEvent): Promise<void> {
+  function routeUri(uri: vscode.Uri): void {
+    const params = new URLSearchParams(uri.query);
+    if (uri.path === "/permission") {
+      const id = params.get("id");
+      const decision = params.get("decision");
+      if (id && decision) {
+        resolvePermission(id, decision === "allow" ? "allow" : "deny");
+      }
+      return;
+    }
+    if (uri.path === "/mute") {
+      const minutes = Math.max(1, Number(params.get("minutes") ?? "30"));
+      const until = Date.now() + minutes * 60_000;
+      const session = params.get("session");
+      if (params.get("scope") === "all" || !session) {
+        mutes.muteGlobal(until);
+        log.appendLine(`[mute] all sessions for ${minutes}m`);
+        vscode.window.showInformationMessage(`Claude Toasts muted for ${minutes} minutes.`);
+      } else {
+        mutes.muteSession(session, until);
+        log.appendLine(`[mute] session ${session.slice(0, 8)} for ${minutes}m`);
+        vscode.window.showInformationMessage(`Claude Toasts muted for this session for ${minutes} minutes.`);
+      }
+      return;
+    }
+    handleFocusUri(uri, { assetDir, registry, log: (m) => log.appendLine(`[focus] ${m}`) });
+  }
+
+  function resolvePermission(id: string, decision: "allow" | "deny"): void {
+    const pending = pendingPermissions.get(id);
+    if (!pending) {
+      log.appendLine(`[permission] ${decision} arrived too late for ${id} (already resolved or timed out)`);
+      vscode.window.showWarningMessage("That permission request already timed out; answer it in the terminal.");
+      return;
+    }
+    clearTimeout(pending.timer);
+    pendingPermissions.delete(id);
+    if (pending.tag) {
+      void notifier.hide(pending.tag);
+    }
+    pending.respond({
+      hookSpecificOutput: {
+        hookEventName: "PermissionRequest",
+        permissionDecision: decision,
+        permissionDecisionReason: `${decision === "allow" ? "Approved" : "Denied"} from a desktop notification`,
+      },
+    });
+    log.appendLine(`[permission] ${decision} for ${id}`);
+  }
+
+  function escalate(respond: Respond, reason: string): void {
+    log.appendLine(`[PermissionRequest] escalated to the terminal: ${reason}`);
+    respond({
+      hookSpecificOutput: {
+        hookEventName: "PermissionRequest",
+        permissionDecision: "escalate",
+        permissionDecisionReason: reason,
+      },
+    });
+  }
+
+  function muteActions(sessionId: string): ToastAction[] {
+    return [{ content: "Mute 30m", uri: muteUri(sessionId, 30) }];
+  }
+
+  async function handlePermissionRequest(ev: HookEvent, respond: Respond): Promise<void> {
+    const sid = ev.session_id ?? "";
+    const info = registry.resolve(sid, ev.cwd);
+    const ctx = buildContext(ev, info);
+    const id = `p${++permissionSeq}`;
+
+    const plan = evaluatePermissionRequest(ev, ctx, (sessionId) => [
+      { content: "Allow", uri: permissionUri(id, "allow") },
+      { content: "Deny", uri: permissionUri(id, "deny") },
+      { content: "Mute 30m", uri: muteUri(sessionId, 30) },
+    ]);
+
+    if ("escalate" in plan) {
+      escalate(respond, plan.reason);
+      return;
+    }
+
+    // Hold the hook open until the toast is answered. Claude Code cancels us at
+    // its own timeout and falls back to the terminal prompt, so we answer a bit
+    // sooner to keep control of the message.
+    const timer = setTimeout(() => {
+      pendingPermissions.delete(id);
+      escalate(respond, "no answer from the desktop notification in time");
+    }, PERMISSION_WAIT_MS);
+    pendingPermissions.set(id, { respond, timer, tag: plan.toast.dedupKey });
+
+    await notifier.show({
+      kind: "permission",
+      title: plan.toast.title,
+      body: plan.toast.body,
+      urgency: plan.toast.urgency,
+      sticky: plan.toast.sticky,
+      sound: cfg.sound,
+      tag: plan.toast.dedupKey,
+      launchUri: await buildLaunchUri(sid),
+      actions: plan.toast.actions,
+    });
+    log.appendLine(`[permission] asked: ${plan.toast.body}`);
+  }
+
+  function buildContext(ev: HookEvent, info: { terminal?: vscode.Terminal; turnStartedAt?: number; completedToastShownThisTurn?: boolean }): PolicyContext {
+    return {
+      windowFocused: vscode.window.state.focused,
+      isBoundTerminalActive: !!info.terminal && info.terminal === vscode.window.activeTerminal,
+      turnStartedAt: info.turnStartedAt,
+      folderName: pickFolderName(ev.cwd),
+      completedToastShownThisTurn: info.completedToastShownThisTurn === true,
+      muted: mutes.isMuted(ev.session_id ?? "", Date.now()),
+      config: cfg,
+    };
+  }
+
+  async function processEvent(ev: HookEvent, respond: Respond): Promise<void> {
     const name = ev.hook_event_name;
     const sid = ev.session_id ?? "";
 
@@ -159,15 +280,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       return;
     }
 
+    if (name === "PermissionRequest") {
+      await handlePermissionRequest(ev, respond);
+      return;
+    }
+
     const info = registry.resolve(sid, ev.cwd);
-    const ctx: PolicyContext = {
-      windowFocused: vscode.window.state.focused,
-      isBoundTerminalActive: !!info.terminal && info.terminal === vscode.window.activeTerminal,
-      turnStartedAt: info.turnStartedAt,
-      folderName: pickFolderName(ev.cwd),
-      completedToastShownThisTurn: info.completedToastShownThisTurn === true,
-      config: cfg,
-    };
+    const ctx = buildContext(ev, info);
 
     const result = evaluateEvent(ev, ctx);
     if ("suppressed" in result) {
@@ -191,6 +310,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       sound: cfg.sound,
       tag: decision.dedupKey,
       launchUri,
+      actions: muteActions(sid),
     });
     if (decision.kind === "complete") {
       registry.markCompletedToastShown(sid);
@@ -367,4 +487,12 @@ function notifyOnce(context: vscode.ExtensionContext, key: string, message: stri
   }
   void context.globalState.update(stateKey, true);
   vscode.window.showInformationMessage(message);
+}
+
+function permissionUri(id: string, decision: "allow" | "deny"): string {
+  return `vscode://${EXT_ID}/permission?id=${encodeURIComponent(id)}&decision=${decision}`;
+}
+
+function muteUri(sessionId: string, minutes: number): string {
+  return `vscode://${EXT_ID}/mute?session=${encodeURIComponent(sessionId)}&minutes=${minutes}`;
 }

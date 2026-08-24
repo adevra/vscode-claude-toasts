@@ -13,6 +13,12 @@ terminal stream, so it knows *which* session, in *which* terminal, and *why*.
   permission prompt, has gone idle, or explicitly needs input.
 - **Click to focus** — clicking a toast focuses the right VS Code window and
   reveals the terminal running that session.
+- **Approve or deny from the toast** — when Claude asks permission to run
+  something while you're away, the toast shows the actual command with **Allow**
+  and **Deny** buttons. Answering there unblocks Claude without touching the
+  window. If you're sitting at that terminal, or you don't answer in time, it
+  falls straight through to Claude's normal prompt.
+- **Mute** — every toast carries a "Mute 30m" button for that session.
 - **Stays quiet when you're already looking** — no toast if the window is focused
   and that session's terminal is active.
 
@@ -20,9 +26,11 @@ terminal stream, so it knows *which* session, in *which* terminal, and *why*.
 
 1. The extension opens a per-window named pipe and injects its address into every
    integrated terminal as an environment variable.
-2. It installs five lightweight Claude Code hooks into `~/.claude/settings.json`
-   (`SessionStart`, `UserPromptSubmit`, `Stop`, `Notification`, `SessionEnd`),
-   all `async` so Claude never waits on them.
+2. It installs six Claude Code hooks into `~/.claude/settings.json`
+   (`SessionStart`, `UserPromptSubmit`, `Stop`, `Notification`, `SessionEnd`,
+   `PermissionRequest`). All are `async` — Claude never waits — except
+   `PermissionRequest`, which blocks only long enough to collect your answer and
+   always falls back to the terminal prompt on timeout.
 3. A tiny zero-dependency hook script forwards each event to that window's pipe.
 4. A pure policy decides whether to toast, and a native Windows (WinRT) toast is
    shown. Clicks route back through VS Code's own `vscode://` URI handler.

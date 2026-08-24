@@ -8,7 +8,17 @@ export const MANAGED_EVENTS = [
   "Stop",
   "Notification",
   "SessionEnd",
+  "PermissionRequest",
 ] as const;
+
+/**
+ * PermissionRequest is the only hook we install synchronously: Claude Code waits
+ * for our allow/deny answer. Everything else is fire-and-forget so it can never
+ * add latency. A timed-out hook falls through to the normal permission prompt,
+ * so blocking here is safe.
+ */
+const BLOCKING_EVENTS = new Set<string>(["PermissionRequest"]);
+const BLOCKING_TIMEOUT_SECONDS = 30;
 
 type Json = Record<string, unknown>;
 
@@ -50,7 +60,10 @@ function isOurGroup(g: unknown): boolean {
   return group.hooks.every(isOurEntry);
 }
 
-function buildEntry(scriptPath: string): HookEntry {
+function buildEntry(scriptPath: string, event: string): HookEntry {
+  if (BLOCKING_EVENTS.has(event)) {
+    return { type: "command", command: "node", args: [scriptPath], timeout: BLOCKING_TIMEOUT_SECONDS };
+  }
   return { type: "command", command: "node", args: [scriptPath], async: true, timeout: 5 };
 }
 
@@ -76,7 +89,7 @@ export function applyInstall(input: Json, scriptPath: string): { settings: Json;
   for (const event of MANAGED_EVENTS) {
     const arr: HookGroup[] = Array.isArray(hooks[event]) ? hooks[event] : [];
     const withoutOurs = arr.filter((g) => !isOurGroup(g));
-    withoutOurs.push({ hooks: [buildEntry(scriptPath)] });
+    withoutOurs.push({ hooks: [buildEntry(scriptPath, event)] });
     hooks[event] = withoutOurs;
   }
 
