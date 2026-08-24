@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.5
+
+- Fix: clicking a toast while the VS Code window was MINIMIZED did nothing (the
+  previously focused app appeared to stay on top). VS Code's own URI activation
+  focuses a minimized window without restoring it, so the extension saw
+  focused=true and skipped its raise. The Win32 raise now always runs after the
+  self-raise settles - it restores a minimized window and is a visual no-op when
+  the window is already up.
+
+## 0.4.4
+
+- Persist the output channel to disk (LogOutputChannel) so raise/suppression
+  decisions can be diagnosed from log files.
+
 ## 0.4.3
 
 - Fix: clicking a toast while another app (e.g. Edge) was in the foreground could

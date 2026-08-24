@@ -86,15 +86,12 @@ export async function raiseWindow(deps: FocusDeps): Promise<void> {
   if (process.platform !== "win32") {
     return;
   }
-  if (vscode.window.state.focused) {
-    deps.log("window already focused; no raise needed");
-    return;
-  }
-  if (await confirmFocused(SELF_RAISE_WAIT_MS)) {
-    deps.log("window raised itself during URI activation; skipping the Win32 raise");
-    armReclaimGuard(deps);
-    return;
-  }
+  // Wait for VS Code's own URI-activation focus to settle, but never trust it as
+  // proof the window is visible: Electron can focus a MINIMIZED window without
+  // restoring it, leaving state.focused true while nothing is on screen. The
+  // ladder below is the authority - it restores a minimized window and is a
+  // visual no-op when the window is already up and focused.
+  await confirmFocused(SELF_RAISE_WAIT_MS);
   if (await doRaise(deps)) {
     armReclaimGuard(deps);
   }
