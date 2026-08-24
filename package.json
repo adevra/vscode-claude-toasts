@@ -123,5 +123,9 @@
     "typescript": "^5.5.0",
     "vitest": "^2.0.0"
   },
-  "icon": "dist/icon.png"
+  "icon": "dist/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/adevra/vscode-claude-toasts.git"
+  }
 }
