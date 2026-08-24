@@ -16,13 +16,7 @@ function req(over: Partial<ToastRequest> = {}): ToastRequest {
 }
 
 describe("buildToastXml", () => {
-  it("embeds the logo as an appLogoOverride file URI", () => {
-    const xml = buildToastXml(req(), "C:\\Users\\me\\claude-logo.png");
-    expect(xml).toContain('placement="appLogoOverride"');
-    expect(xml).toContain("file:///C:/Users/me/claude-logo.png");
-  });
-
-  it("omits the logo when no icon path is given", () => {
+  it("never embeds a body logo (the small AUMID icon is the only branding)", () => {
     expect(buildToastXml(req())).not.toContain("appLogoOverride");
   });
 

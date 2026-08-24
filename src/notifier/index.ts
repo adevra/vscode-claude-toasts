@@ -34,7 +34,5 @@ export interface NotifierDeps {
   /** Directory holding the bundled .ps1 helpers (dist/). */
   assetDir: string;
   appId: string;
-  /** Absolute path to the toast logo, shown as appLogoOverride; optional. */
-  iconPath?: string;
   log(message: string): void;
 }

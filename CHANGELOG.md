@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.2
+
+- Removed the large body icon (appLogoOverride) from toasts; the small app icon
+  next to the attribution line is the only branding now.
+
 ## 0.4.1
 
 - Background-job sessions (daemon-spawned, no terminal in their process

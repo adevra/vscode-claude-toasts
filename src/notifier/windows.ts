@@ -18,7 +18,7 @@ export class WindowsNotifier implements Notifier {
   }
 
   show(req: ToastRequest): Promise<void> {
-    const xml = buildToastXml(req, this.deps.iconPath);
+    const xml = buildToastXml(req);
     const b64 = Buffer.from(xml, "utf8").toString("base64");
     const tag = shortTag(req.tag);
     const args = [
@@ -78,7 +78,7 @@ function xmlEscape(s: string): string {
     .replace(/'/g, "&apos;");
 }
 
-export function buildToastXml(req: ToastRequest, iconPath?: string): string {
+export function buildToastXml(req: ToastRequest): string {
   const scenario = req.sticky ? ' scenario="urgent"' : "";
   const launch = req.launchUri ? ` launch="${xmlEscape(req.launchUri)}"` : "";
   const audio = req.sound ? "" : '\n  <audio silent="true"/>';
@@ -95,9 +95,6 @@ export function buildToastXml(req: ToastRequest, iconPath?: string): string {
           .join("\n") +
         "\n  </actions>"
       : "";
-  const logo = iconPath
-    ? `\n      <image placement="appLogoOverride" src="${xmlEscape(pathToFileURL(iconPath).href)}"/>`
-    : "";
   const attribution = req.attribution
     ? `\n      <text placement="attribution">${xmlEscape(req.attribution)}</text>`
     : "";
@@ -109,7 +106,7 @@ export function buildToastXml(req: ToastRequest, iconPath?: string): string {
     `  <visual>\n` +
     `    <binding template="ToastGeneric">\n` +
     `      <text>${title}</text>\n` +
-    `      <text>${body}</text>${attribution}${logo}${strip}\n` +
+    `      <text>${body}</text>${attribution}${strip}\n` +
     `    </binding>\n` +
     `  </visual>${actions}${audio}\n` +
     `</toast>`

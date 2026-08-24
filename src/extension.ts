@@ -48,7 +48,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const assetDir = path.join(context.extensionUri.fsPath, "dist");
   const iconPath = deployAsset(context, "icon.png");
-  const notifier: Notifier = createNotifier({ assetDir, appId: APP_ID, iconPath, log: (m) => log.appendLine(m) });
+  const notifier: Notifier = createNotifier({ assetDir, appId: APP_ID, log: (m) => log.appendLine(m) });
   context.subscriptions.push({ dispose: () => notifier.dispose() });
 
   // --- dormant paths: nothing to toast with -----------------------------
