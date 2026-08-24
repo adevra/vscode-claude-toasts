@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0
+
+- Sessions running in standalone terminals (Windows Terminal, etc.) are now
+  first-class: clicking their toast raises the terminal window itself instead of
+  VS Code. The hook sends the Claude CLI pid; the extension walks the process
+  ancestry to the terminal host and carries its window handle in the toast's
+  launch URI, so any VS Code window can perform the raise.
+- VS Code terminal binding is now exact: an ancestor pid matching a terminal's
+  shell pid beats the old active-terminal-at-SessionStart heuristic, which stays
+  only as a fallback. This also makes the 'stay quiet when you are watching'
+  suppression reliable for VS Code terminals.
+
 ## 0.3.1
 
 - Fix: clicking a toast raised the VS Code window twice. A focus trace showed

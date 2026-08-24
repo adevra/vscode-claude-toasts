@@ -36,7 +36,19 @@ export function handleFocusUri(uri: vscode.Uri, deps: FocusDeps): void {
     deps.log(`ignoring uri path: ${uri.path}`);
     return;
   }
-  const sessionId = new URLSearchParams(uri.query).get("session");
+  const params = new URLSearchParams(uri.query);
+
+  // A session in a standalone terminal: raise that terminal's window instead of
+  // VS Code. The hwnd travels in the URI so ANY window that receives the click
+  // can act on it, without needing the session in its own registry.
+  const externalHwnd = params.get("hwnd");
+  if (externalHwnd && /^\d+$/.test(externalHwnd)) {
+    deps.log(`raising external terminal window (hwnd ${externalHwnd})`);
+    void raiseExternal(deps, externalHwnd);
+    return;
+  }
+
+  const sessionId = params.get("session");
   if (sessionId) {
     const info = deps.registry.list().find((s) => s.sessionId === sessionId);
     if (info?.terminal) {
@@ -46,6 +58,16 @@ export function handleFocusUri(uri: vscode.Uri, deps: FocusDeps): void {
     }
   }
   void raiseWindow(deps);
+}
+
+/** Raise a non-VS-Code window (a standalone terminal) by handle. */
+async function raiseExternal(deps: FocusDeps, hwnd: string): Promise<void> {
+  const result = await run(deps, ["-Mode", "raise", "-Hwnd", hwnd]);
+  if (result.foreground) {
+    deps.log(`external terminal raised via ${result.strategy}`);
+  } else {
+    deps.log("external terminal did not take focus (window may be gone)");
+  }
 }
 
 /** Bring this VS Code window to the foreground (Windows only; no-op elsewhere). */

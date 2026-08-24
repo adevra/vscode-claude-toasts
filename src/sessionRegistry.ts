@@ -7,6 +7,10 @@ export interface SessionInfo {
   turnStartedAt?: number;
   /** Set when a completion toast fires; cleared when the next turn starts. */
   completedToastShownThisTurn?: boolean;
+  /** Window handle of the standalone terminal hosting this session, if external. */
+  externalHwnd?: string;
+  /** True once the ppid ancestry walk has resolved this session's home. */
+  bindingResolved?: boolean;
 }
 
 /** Normalize a path for loose comparison: lowercase, forward slashes, no trailing slash. */
@@ -52,6 +56,22 @@ export class SessionRegistry {
       info.terminal = this.pickTerminal(cwd ?? info.cwd);
     }
     return info;
+  }
+
+  /** Exact binding from the process-ancestry walk; overrides the cwd heuristic. */
+  applyBinding(sessionId: string, terminal: vscode.Terminal | undefined, externalHwnd: string | undefined): void {
+    const info = this.sessions.get(sessionId);
+    if (!info) {
+      return;
+    }
+    info.bindingResolved = true;
+    if (terminal) {
+      info.terminal = terminal;
+      info.externalHwnd = undefined;
+    } else if (externalHwnd) {
+      info.terminal = undefined;
+      info.externalHwnd = externalHwnd;
+    }
   }
 
   markCompletedToastShown(sessionId: string): void {

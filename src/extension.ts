@@ -14,6 +14,7 @@ import {
   removeHooksFromFile,
 } from "./hookInstaller";
 import { pruneDeadEntries, removeLiveEntry, writeLiveEntry } from "./liveRegistry";
+import { decideBinding, parseAncestry } from "./processTree";
 import { createNotifier } from "./notifier/factory";
 import { Notifier } from "./notifier/index";
 import { evaluateEvent, evaluatePermissionRequest, ToastGate } from "./notificationPolicy";
@@ -137,7 +138,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       `sessions    : ${registry.size}`,
       ...registry
         .list()
-        .map((s) => `  - ${s.sessionId.slice(0, 8)} cwd=${s.cwd ?? "?"} terminal=${s.terminal ? "bound" : "none"}`),
+        .map(
+          (s) =>
+            `  - ${s.sessionId.slice(0, 8)} cwd=${s.cwd ?? "?"} binding=${
+              s.terminal ? "vscode-terminal" : s.externalHwnd ? `external(hwnd ${s.externalHwnd})` : "none"
+            }${s.bindingResolved ? "" : " (heuristic)"}`,
+        ),
       `window focus: ${vscode.window.state.focused}`,
       `config      : ${JSON.stringify(cfg)}`,
     ],
@@ -255,6 +261,51 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     log.appendLine(`[permission] asked: ${plan.toast.body}`);
   }
 
+  /**
+   * Walk the process ancestry from the Claude CLI pid to find where the session
+   * actually lives: an exact VS Code terminal (ancestor pid == the terminal's
+   * shell pid) or a standalone terminal window to raise on toast click.
+   */
+  async function resolveBinding(sessionId: string, claudePid: number | null | undefined): Promise<void> {
+    if (!claudePid || process.platform !== "win32") {
+      return;
+    }
+    try {
+      const terminals = vscode.window.terminals;
+      const pids = await Promise.all(terminals.map((t) => t.processId));
+      const byPid = new Map<number, vscode.Terminal>();
+      pids.forEach((pid, i) => {
+        if (typeof pid === "number") {
+          byPid.set(pid, terminals[i]);
+        }
+      });
+
+      const script = path.join(assetDir, "session-window.ps1");
+      const stdout = await new Promise<string>((resolve) => {
+        execFile(
+          "powershell.exe",
+          ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, "-StartPid", String(claudePid)],
+          { timeout: 15000, windowsHide: true },
+          (_err, out) => resolve(out ?? ""),
+        );
+      });
+
+      const binding = decideBinding(parseAncestry(stdout), new Set(byPid.keys()));
+      if (binding.kind === "terminal") {
+        registry.applyBinding(sessionId, byPid.get(binding.shellPid), undefined);
+        log.appendLine(`[bind] ${sessionId.slice(0, 8)} -> VS Code terminal (shell pid ${binding.shellPid})`);
+      } else if (binding.kind === "external") {
+        registry.applyBinding(sessionId, undefined, binding.hwnd);
+        log.appendLine(`[bind] ${sessionId.slice(0, 8)} -> external terminal window (hwnd ${binding.hwnd})`);
+      } else {
+        log.appendLine(`[bind] ${sessionId.slice(0, 8)} -> no terminal found in ancestry; keeping heuristic binding`);
+      }
+      statusBar.refresh();
+    } catch (e) {
+      log.appendLine(`[bind] resolution failed: ${(e as Error).message}`);
+    }
+  }
+
   function buildContext(ev: HookEvent, info: { terminal?: vscode.Terminal; turnStartedAt?: number; completedToastShownThisTurn?: boolean }): PolicyContext {
     const repo = findRepoInfo(ev.cwd);
     const explicit = colorReader.read(ev.session_id ?? "", ev.transcript_path);
@@ -277,6 +328,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
     if (name === "SessionStart") {
       registry.onSessionStart(sid, ev.cwd);
+      void resolveBinding(sid, ev.claude_pid);
       statusBar.refresh();
       return;
     }
@@ -297,6 +349,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
 
     const info = registry.resolve(sid, ev.cwd);
+    if (!info.bindingResolved) {
+      void resolveBinding(sid, ev.claude_pid);
+    }
     const ctx = buildContext(ev, info);
 
     const result = evaluateEvent(ev, ctx);

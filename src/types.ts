@@ -6,6 +6,8 @@ export interface HookEvent {
   session_id: string | null;
   cwd: string | null;
   transcript_path?: string | null;
+  /** PID of the Claude CLI process (the hook's parent), for terminal discovery. */
+  claude_pid?: number | null;
   ts: number;
   notification_type?: string | null;
   tool_name?: string | null;
