@@ -5,6 +5,7 @@ export interface HookEvent {
   hook_event_name: string | null;
   session_id: string | null;
   cwd: string | null;
+  transcript_path?: string | null;
   ts: number;
   notification_type?: string | null;
   tool_name?: string | null;
@@ -35,6 +36,10 @@ export interface Decision {
   dedupKey: string;
   /** Buttons rendered on the toast. */
   actions?: ToastAction[];
+  /** Small bottom line: "repo · branch". */
+  attribution?: string;
+  /** Palette color name for the inline strip, or null for no strip. */
+  accentColor?: string | null;
 }
 
 export type PolicyResult =
@@ -69,6 +74,10 @@ export interface PolicyContext {
   completedToastShownThisTurn?: boolean;
   /** True while this session (or everything) is muted; suppresses all toasts. */
   muted?: boolean;
+  /** Small bottom line for the toast: "repo · branch"; empty to omit. */
+  attribution?: string;
+  /** Session color: /color override, else per-repo auto color; null for none. */
+  accentColor?: string | null;
   config: PolicyConfig;
 }
 

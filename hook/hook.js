@@ -137,6 +137,7 @@ function buildLine(ev, token) {
       hook_event_name: ev.hook_event_name || null,
       session_id: ev.session_id || null,
       cwd: ev.cwd || null,
+      transcript_path: ev.transcript_path || null,
       notification_type: ev.notification_type || null,
       tool_name: ev.tool_name || null,
       tool_summary: summarizeToolInput(ev.tool_input),

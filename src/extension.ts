@@ -1,3 +1,4 @@
+import { execFile } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -17,6 +18,7 @@ import { createNotifier } from "./notifier/factory";
 import { Notifier } from "./notifier/index";
 import { evaluateEvent, evaluatePermissionRequest, ToastGate } from "./notificationPolicy";
 import { MuteStore } from "./muteStore";
+import { findRepoInfo, PALETTE, resolveAccentColor, SessionColorReader } from "./sessionMeta";
 import { SessionRegistry } from "./sessionRegistry";
 import { StatusBar } from "./statusBar";
 import { HookEvent, PolicyContext, ToastAction } from "./types";
@@ -37,6 +39,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const registry = new SessionRegistry();
   const gate = new ToastGate(cfg);
   const mutes = new MuteStore();
+  const colorReader = new SessionColorReader();
   const pendingPermissions = new Map<string, { respond: Respond; timer: NodeJS.Timeout; tag?: string }>();
   let permissionSeq = 0;
   const statusBar = new StatusBar(registry);
@@ -91,6 +94,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   if (pruned > 0) {
     log.appendLine(`pruned ${pruned} dead window entr${pruned === 1 ? "y" : "ies"}`);
   }
+  ensureColorStrips(storageDir);
   const liveFile = writeLiveEntry(storageDir, {
     pipe: server.pipePath,
     token: server.token,
@@ -245,11 +249,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       tag: plan.toast.dedupKey,
       launchUri: await buildLaunchUri(sid),
       actions: plan.toast.actions,
+      attribution: plan.toast.attribution,
+      stripPath: stripPathFor(context, plan.toast.accentColor),
     });
     log.appendLine(`[permission] asked: ${plan.toast.body}`);
   }
 
   function buildContext(ev: HookEvent, info: { terminal?: vscode.Terminal; turnStartedAt?: number; completedToastShownThisTurn?: boolean }): PolicyContext {
+    const repo = findRepoInfo(ev.cwd);
+    const explicit = colorReader.read(ev.session_id ?? "", ev.transcript_path);
     return {
       windowFocused: vscode.window.state.focused,
       isBoundTerminalActive: !!info.terminal && info.terminal === vscode.window.activeTerminal,
@@ -257,6 +265,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       folderName: pickFolderName(ev.cwd),
       completedToastShownThisTurn: info.completedToastShownThisTurn === true,
       muted: mutes.isMuted(ev.session_id ?? "", Date.now()),
+      attribution: repo ? (repo.branch ? `${repo.repo} · ${repo.branch}` : repo.repo) : "",
+      accentColor: resolveAccentColor(explicit, repo?.repo ?? pickFolderName(ev.cwd)),
       config: cfg,
     };
   }
@@ -276,6 +286,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
     if (name === "SessionEnd") {
       registry.onSessionEnd(sid);
+      colorReader.drop(sid);
       statusBar.refresh();
       return;
     }
@@ -311,6 +322,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       tag: decision.dedupKey,
       launchUri,
       actions: muteActions(sid),
+      attribution: decision.attribution,
+      stripPath: stripPathFor(context, decision.accentColor),
     });
     if (decision.kind === "complete") {
       registry.markCompletedToastShown(sid);
@@ -495,4 +508,38 @@ function permissionUri(id: string, decision: "allow" | "deny"): string {
 
 function muteUri(sessionId: string, minutes: number): string {
   return `vscode://${EXT_ID}/mute?session=${encodeURIComponent(sessionId)}&minutes=${minutes}`;
+}
+
+/** Absolute path to the pre-generated strip PNG for a palette color, if present. */
+function stripPathFor(context: vscode.ExtensionContext, color: string | null | undefined): string | undefined {
+  if (!color) {
+    return undefined;
+  }
+  const p = path.join(context.globalStorageUri.fsPath, "strips", `strip-${color}.png`);
+  return fs.existsSync(p) ? p : undefined;
+}
+
+/** Generate the palette strip PNGs into globalStorage once per install. */
+function ensureColorStrips(storageDir: string): void {
+  const dir = path.join(storageDir, "strips");
+  const missing = Object.keys(PALETTE).some((c) => !fs.existsSync(path.join(dir, `strip-${c}.png`)));
+  if (!missing) {
+    return;
+  }
+  const spec = Object.entries(PALETTE)
+    .map(([name, hex]) => `${name}=${hex}`)
+    .join(";");
+  const script = path.join(__dirname, "make-strips.ps1");
+  execFile(
+    "powershell.exe",
+    ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, "-OutDir", dir, "-Spec", spec],
+    { timeout: 15000, windowsHide: true },
+    (err) => {
+      if (err) {
+        log.appendLine(`strip generation failed: ${err.message}`);
+      } else {
+        log.appendLine("color strips generated");
+      }
+    },
+  );
 }

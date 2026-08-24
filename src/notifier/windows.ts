@@ -98,12 +98,18 @@ export function buildToastXml(req: ToastRequest, iconPath?: string): string {
   const logo = iconPath
     ? `\n      <image placement="appLogoOverride" src="${xmlEscape(pathToFileURL(iconPath).href)}"/>`
     : "";
+  const attribution = req.attribution
+    ? `\n      <text placement="attribution">${xmlEscape(req.attribution)}</text>`
+    : "";
+  const strip = req.stripPath
+    ? `\n      <image src="${xmlEscape(pathToFileURL(req.stripPath).href)}"/>`
+    : "";
   return (
     `<toast activationType="protocol"${launch}${scenario}>\n` +
     `  <visual>\n` +
     `    <binding template="ToastGeneric">\n` +
     `      <text>${title}</text>\n` +
-    `      <text>${body}</text>${logo}\n` +
+    `      <text>${body}</text>${attribution}${logo}${strip}\n` +
     `    </binding>\n` +
     `  </visual>${actions}${audio}\n` +
     `</toast>`

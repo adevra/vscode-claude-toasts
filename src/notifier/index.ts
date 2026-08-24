@@ -16,6 +16,10 @@ export interface ToastRequest {
   launchUri?: string;
   /** Buttons; each opens its own vscode:// URI via protocol activation. */
   actions?: ToastAction[];
+  /** Small bottom line: "repo · branch". */
+  attribution?: string;
+  /** Absolute path to a color-strip PNG rendered under the text; optional. */
+  stripPath?: string;
 }
 
 export interface Notifier {

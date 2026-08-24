@@ -58,9 +58,20 @@ function decision(
   urgency: Decision["urgency"],
   sticky: boolean,
   sessionId: string,
+  ctx: PolicyContext,
 ): PolicyResult {
   return {
-    decision: { kind, title, body, urgency, sticky, sessionId, dedupKey: `${sessionId}:${kind}` },
+    decision: {
+      kind,
+      title,
+      body,
+      urgency,
+      sticky,
+      sessionId,
+      dedupKey: `${sessionId}:${kind}`,
+      attribution: ctx.attribution,
+      accentColor: ctx.accentColor ?? null,
+    },
   };
 }
 
@@ -97,7 +108,7 @@ export function evaluateEvent(event: HookEvent, ctx: PolicyContext): PolicyResul
         return suppressed("user is watching the session terminal");
       }
       const body = preview(event.last_assistant_message, cfg.messagePreviewLength);
-      return decision("complete", `Claude finished · ${ctx.folderName}`, body, "normal", false, sessionId);
+      return decision("complete", `Claude finished · ${ctx.folderName}`, body, "normal", false, sessionId, ctx);
     }
 
     case "Notification": {
@@ -115,7 +126,7 @@ export function evaluateEvent(event: HookEvent, ctx: PolicyContext): PolicyResul
         return suppressed("user is watching the session terminal");
       }
       const body = describeNeedsInput(nt, event.tool_name);
-      return decision("needs-input", `Claude needs you · ${ctx.folderName}`, body, "high", true, sessionId);
+      return decision("needs-input", `Claude needs you · ${ctx.folderName}`, body, "high", true, sessionId, ctx);
     }
 
     default:
@@ -202,6 +213,8 @@ export function evaluatePermissionRequest(
       sessionId,
       dedupKey: `${sessionId}:permission:${event.tool_use_id ?? ""}`,
       actions: actions(sessionId),
+      attribution: ctx.attribution,
+      accentColor: ctx.accentColor ?? null,
     },
   };
 }

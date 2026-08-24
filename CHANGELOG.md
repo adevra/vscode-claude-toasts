@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0
+
+- Toasts now show the repository name and branch in the attribution line
+  ("vscode-claude-toasts · main"), read from .git/HEAD - no git processes.
+- Session color strip: a thin color bar under the toast text. Uses the session's
+  /color from Claude Code when set (read live from the session transcript, so
+  mid-session changes apply), otherwise a stable auto color per repository from
+  the same 8-color palette. /color default falls back to the auto color.
+
 ## 0.2.3
 
 - Removed the foreground-lock-timeout strategy from the window-raise ladder. It

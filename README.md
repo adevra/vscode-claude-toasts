@@ -19,6 +19,9 @@ terminal stream, so it knows *which* session, in *which* terminal, and *why*.
   window. If you're sitting at that terminal, or you don't answer in time, it
   falls straight through to Claude's normal prompt.
 - **Mute** — every toast carries a "Mute 30m" button for that session.
+- **Repo and color context** — every toast names the repository and branch, and
+  carries a color strip: your session's `/color` if you set one in Claude Code,
+  otherwise a stable per-repo color.
 - **Stays quiet when you're already looking** — no toast if the window is focused
   and that session's terminal is active.
 

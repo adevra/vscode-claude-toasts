@@ -117,6 +117,7 @@ function handleLine(line: string, token: string, cb: HookServerCallbacks, respon
       hook_event_name: str(obj.hook_event_name),
       session_id: str(obj.session_id),
       cwd: str(obj.cwd),
+      transcript_path: str(obj.transcript_path),
       ts: typeof obj.ts === "number" ? obj.ts : Date.now(),
       notification_type: str(obj.notification_type),
       tool_name: str(obj.tool_name),

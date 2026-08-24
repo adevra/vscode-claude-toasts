@@ -36,6 +36,20 @@ describe("buildToastXml", () => {
     expect(buildToastXml(req({ sound: true }))).not.toContain("<audio");
   });
 
+  it("renders the attribution line when given", () => {
+    const xml = buildToastXml(req({ attribution: "vscode-claude-toasts · main" }));
+    expect(xml).toContain('<text placement="attribution">vscode-claude-toasts · main</text>');
+  });
+
+  it("omits the attribution line when absent", () => {
+    expect(buildToastXml(req())).not.toContain("attribution");
+  });
+
+  it("renders the color strip as an inline image", () => {
+    const xml = buildToastXml(req({ stripPath: "C:\\store\\strips\\strip-red.png" }));
+    expect(xml).toContain('<image src="file:///C:/store/strips/strip-red.png"/>');
+  });
+
   it("xml-escapes the launch uri and text", () => {
     const xml = buildToastXml(req({ title: "a & b <c>", launchUri: "vscode://x/focus?session=a&b" }));
     expect(xml).toContain("a &amp; b &lt;c&gt;");

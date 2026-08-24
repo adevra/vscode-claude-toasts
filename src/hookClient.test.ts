@@ -66,7 +66,7 @@ describe("hook.js", () => {
         session_id: "sess-1",
         cwd: "C:/proj",
         last_assistant_message: "Finished the task.",
-        transcript_path: "/should/be/dropped",
+        transcript_path: "/path/to/transcript.jsonl",
         extra: "dropped too",
       }),
     );
@@ -78,7 +78,7 @@ describe("hook.js", () => {
     expect(p.hook_event_name).toBe("Stop");
     expect(p.session_id).toBe("sess-1");
     expect(p.last_assistant_message).toBe("Finished the task.");
-    expect(p.transcript_path).toBeUndefined();
+    expect(p.transcript_path).toBe("/path/to/transcript.jsonl");
     expect(p.extra).toBeUndefined();
     expect(typeof p.ts).toBe("number");
   });
