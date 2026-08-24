@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateEvent, preview, ToastGate } from "./notificationPolicy";
+import { evaluateEvent, preview, previewTail, ToastGate } from "./notificationPolicy";
 import { HookEvent, PolicyConfig, PolicyContext } from "./types";
 
 const baseConfig: PolicyConfig = {
@@ -181,11 +181,26 @@ describe("preview", () => {
     expect(preview("abcdefghij", 5)).toBe("abcd…");
   });
   it("never exceeds MAX_MESSAGE_CHARS even if asked", () => {
-    const long = "x".repeat(1000);
-    expect(preview(long, 9999).length).toBe(500);
+    const long = "x".repeat(2000);
+    expect(preview(long, 9999).length).toBe(800);
   });
   it("handles null", () => {
     expect(preview(null, 100)).toBe("");
+  });
+});
+
+describe("previewTail", () => {
+  it("keeps the end of a long message with a leading ellipsis", () => {
+    const out = previewTail("start middle THE END", 10);
+    expect(out.startsWith("…")).toBe(true);
+    expect(out.endsWith("THE END")).toBe(true);
+    expect(out.length).toBeLessThanOrEqual(10);
+  });
+  it("returns short text unchanged", () => {
+    expect(previewTail("short", 100)).toBe("short");
+  });
+  it("caps at MAX_MESSAGE_CHARS", () => {
+    expect(previewTail("x".repeat(2000), 9999).length).toBe(800);
   });
 });
 

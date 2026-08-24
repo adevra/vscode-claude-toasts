@@ -8,8 +8,9 @@ leaving the notification.
 
 ## What you get
 
-- **Claude finished** — a toast when a turn ends, with a preview of the last
-  message. Quick turns (under 20s by default) stay quiet.
+- **Claude finished** — a toast when a turn ends showing the end of Claude's
+  message (up to 800 chars; expand in the Action Center to read it all). Quick
+  turns (under 20s by default) stay quiet.
 - **Claude needs you** — a sticky, high-urgency toast when Claude is blocked on
   a permission prompt, has gone idle, or explicitly needs input.
 - **Reply from the toast** (opt-in: `claudeToasts.replyBox`) — completion and
@@ -82,7 +83,7 @@ All under `claudeToasts.*`:
 | `replyBox` | `false` | opt-in: text box + Send on toasts |
 | `minTurnDurationSeconds` | `20` | skip toasts for quick turns |
 | `suppressWhenActiveTerminal` | `true` | stay quiet while you watch |
-| `messagePreviewLength` | `120` | characters of Claude's message shown |
+| `messagePreviewLength` | `800` | trailing characters of Claude's message shown |
 | `sound` | `true` | system notification sound |
 | `dedupWindowSeconds` | `5` | collapse repeats per session and kind |
 | `maxToastsPerMinute` | `10` | runaway backstop |

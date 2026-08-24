@@ -83,14 +83,16 @@ describe("hook.js", () => {
     expect(typeof p.ts).toBe("number");
   });
 
-  it("truncates the assistant message to 500 chars", async () => {
+  it("keeps the LAST 800 chars of a long assistant message", async () => {
     harness = pipeServer();
     await runHook(
       { CLAUDE_TOASTS_PIPE: harness.pipePath, CLAUDE_TOASTS_TOKEN: "t" },
-      JSON.stringify({ hook_event_name: "Stop", last_assistant_message: "x".repeat(2000) }),
+      JSON.stringify({ hook_event_name: "Stop", last_assistant_message: "x".repeat(2000) + "THE-END" }),
     );
     const lines = await harness.received;
-    expect(JSON.parse(lines[0]).last_assistant_message.length).toBe(500);
+    const msg = JSON.parse(lines[0]).last_assistant_message;
+    expect(msg.length).toBe(800);
+    expect(msg.endsWith("THE-END")).toBe(true);
   });
 
   it("exits 0 and sends nothing when the env vars are absent", async () => {

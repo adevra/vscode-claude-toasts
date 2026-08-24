@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.5
+
+- Completion toasts now show the END of Claude's message (up to 800 chars, with
+  a leading ellipsis when clipped) instead of the beginning - conclusions live
+  at the end. The body wraps; expand the toast in the Action Center to read it
+  all. messagePreviewLength now defaults to 800 (max 800). Permission-toast
+  command summaries still keep their beginning.
+
 ## 0.5.4
 
 - The reply box is now opt-in: claudeToasts.replyBox defaults to off.

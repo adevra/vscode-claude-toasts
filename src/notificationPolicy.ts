@@ -35,6 +35,19 @@ export function preview(text: string | null | undefined, max: number): string {
   return collapsed.slice(0, Math.max(0, limit - 1)).trimEnd() + "…";
 }
 
+/** Like preview, but keeps the END of the text - where a reply's conclusions live. */
+export function previewTail(text: string | null | undefined, max: number): string {
+  if (!text) {
+    return "";
+  }
+  const limit = Math.max(0, Math.min(max, MAX_MESSAGE_CHARS));
+  const collapsed = text.replace(/\s+/g, " ").trim();
+  if (collapsed.length <= limit) {
+    return collapsed;
+  }
+  return "…" + collapsed.slice(-(limit - 1)).trimStart();
+}
+
 function describeNeedsInput(
   notificationType: string | null | undefined,
   toolName: string | null | undefined,
@@ -107,7 +120,7 @@ export function evaluateEvent(event: HookEvent, ctx: PolicyContext): PolicyResul
       if (isUserWatching(ctx)) {
         return suppressed("user is watching the session terminal");
       }
-      const body = preview(event.last_assistant_message, cfg.messagePreviewLength);
+      const body = previewTail(event.last_assistant_message, cfg.messagePreviewLength);
       return decision("complete", `Claude finished · ${ctx.folderName}`, body, "normal", false, sessionId, ctx);
     }
 

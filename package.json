@@ -2,7 +2,7 @@
   "name": "vscode-claude-toasts",
   "displayName": "Claude Code Toasts",
   "description": "Native desktop notifications when Claude Code finishes a turn or needs your input, driven by Claude Code hooks.",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "publisher": "duron",
   "license": "MIT",
   "engines": {
@@ -76,10 +76,10 @@
         },
         "claudeToasts.messagePreviewLength": {
           "type": "number",
-          "default": 120,
+          "default": 800,
           "minimum": 0,
-          "maximum": 500,
-          "description": "How many characters of Claude's message to show in the toast body (max 500)."
+          "maximum": 800,
+          "description": "How many characters of Claude's message to show in the toast (max 800). The END of the message is kept - expand the toast in the Action Center to read it all."
         },
         "claudeToasts.sound": {
           "type": "boolean",

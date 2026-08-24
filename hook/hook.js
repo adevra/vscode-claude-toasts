@@ -24,7 +24,8 @@ const net = require("net");
 const path = require("path");
 
 const MAX_STDIN = 1_000_000;
-const MAX_MESSAGE_CHARS = 500;
+const MAX_MESSAGE_CHARS = 800;
+const TOOL_SUMMARY_CHARS = 500;
 const CONNECT_TIMEOUT_MS = 600;
 const MAX_CANDIDATES = 8;
 const RESPONSE_TIMEOUT_MS = 25000;
@@ -120,7 +121,7 @@ function summarizeToolInput(input) {
   if (!input || typeof input !== "object") return null;
   const pick = input.command || input.file_path || input.path || input.pattern || input.url || input.prompt;
   if (typeof pick === "string" && pick.trim()) {
-    return pick.trim().slice(0, MAX_MESSAGE_CHARS);
+    return pick.trim().slice(0, TOOL_SUMMARY_CHARS);
   }
   return null;
 }
@@ -128,7 +129,7 @@ function summarizeToolInput(input) {
 function buildLine(ev, token) {
   const msg =
     typeof ev.last_assistant_message === "string"
-      ? ev.last_assistant_message.slice(0, MAX_MESSAGE_CHARS)
+      ? ev.last_assistant_message.slice(-MAX_MESSAGE_CHARS)
       : null;
   return (
     JSON.stringify({

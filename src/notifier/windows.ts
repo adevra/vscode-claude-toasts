@@ -107,7 +107,7 @@ export function buildToastXml(req: ToastRequest): string {
     `  <visual>\n` +
     `    <binding template="ToastGeneric">\n` +
     `      <text>${title}</text>\n` +
-    `      <text>${body}</text>${attribution}${strip}\n` +
+    `      <text hint-wrap="true" hint-maxLines="30">${body}</text>${attribution}${strip}\n` +
     `    </binding>\n` +
     `  </visual>${actions}${audio}\n` +
     `</toast>`

@@ -91,4 +91,4 @@ export const BLOCKING_NOTIFICATION_TYPES = [
 ] as const;
 
 /** Hard ceiling on how much assistant text ever leaves the Claude process (see hook.js). */
-export const MAX_MESSAGE_CHARS = 500;
+export const MAX_MESSAGE_CHARS = 800;

@@ -16,7 +16,7 @@ export function readConfig(): ExtensionConfig {
     notifyOnNeedsInput: c.get<boolean>("notifyOnNeedsInput", true),
     minTurnDurationSeconds: Math.max(0, c.get<number>("minTurnDurationSeconds", 20)),
     suppressWhenActiveTerminal: c.get<boolean>("suppressWhenActiveTerminal", true),
-    messagePreviewLength: clamp(c.get<number>("messagePreviewLength", 120), 0, MAX_MESSAGE_CHARS),
+    messagePreviewLength: clamp(c.get<number>("messagePreviewLength", 800), 0, MAX_MESSAGE_CHARS),
     sound: c.get<boolean>("sound", true),
     replyBox: c.get<boolean>("replyBox", false),
     dedupWindowSeconds: Math.max(0, c.get<number>("dedupWindowSeconds", 5)),
