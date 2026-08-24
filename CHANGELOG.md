@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.2
+
+- New icon: a toasted slice branded with the Claude burst, used for the
+  extension and the toast app-logo.
+
 ## 0.1.1
 
 - Toasts now show the Claude logo (as the prominent app-logo icon and the

@@ -37,7 +37,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(statusBar);
 
   const assetDir = path.join(context.extensionUri.fsPath, "dist");
-  const iconPath = deployAsset(context, "claude-logo.png");
+  const iconPath = deployAsset(context, "icon.png");
   const notifier: Notifier = createNotifier({ assetDir, appId: APP_ID, iconPath, log: (m) => log.appendLine(m) });
   context.subscriptions.push({ dispose: () => notifier.dispose() });
 
