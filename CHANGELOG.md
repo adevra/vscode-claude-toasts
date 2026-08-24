@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.2
+
+- Extension category corrected to Other (was wrongly listed under Notebooks).
+
 ## 0.5.1
 
 - New icon (user-supplied) and a rewritten README covering the full feature set.
