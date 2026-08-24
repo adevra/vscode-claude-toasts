@@ -1,8 +1,30 @@
 # Design: vscode-claude-toasts
 
 **Date:** 2026-08-23
-**Status:** Approved for planning
+**Status:** Implemented (v1)
 **Scope:** v1 — two notification kinds, Windows-first, extension-managed global hooks
+
+## Implementation deviations (2026-08-24)
+
+The M0 spikes changed two decisions. Everything else was built as designed.
+
+- **Notifier: SnoreToast → native WinRT.** The bundled SnoreToast binary returned
+  `-1` on every invocation on this Windows 11 machine (stripped build, no version
+  metadata). Native WinRT toasts fired from a small bundled PowerShell script
+  (`media/show-toast.ps1`) work reliably and ship nothing binary. Toast replacement
+  uses the WinRT `Tag`/`Group` instead of SnoreToast's `-id`; urgency maps to
+  `scenario="urgent"`; `sound:false` adds `<audio silent="true"/>`.
+- **AUMID: Start Menu shortcut → registry key.** A notification-only AppUserModelID
+  registered at `HKCU\Software\Classes\AppUserModelId\<AppId>` (a plain `reg.exe`
+  write, no COM, no shortcut) is sufficient for Windows 11 to show and attribute the
+  toast. Uninstall is a registry delete.
+- **Click-to-focus: custom pipe callback → `vscode://` URI.** A custom
+  `claude-toasts:` protocol was rejected by the Win11 toast activator ("no app to
+  open this link"). Instead the toast's `launch` is a `vscode://adev.vscode-claude-toasts/focus?session=…`
+  URI (built per-window via `asExternalUri`), caught by the extension's
+  `registerUriHandler`. This also solves window-raising — VS Code focuses itself when
+  it handles the URI — so the per-window pipe carries hook events *in* only, and
+  clicks route back over `vscode://`. Both M0 spikes are resolved.
 
 ## Problem
 
