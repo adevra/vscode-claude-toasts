@@ -21,6 +21,14 @@ const FOCUS_CONFIRM_MS = 400;
  * ladder only if the window still isn't focused.
  */
 const SELF_RAISE_WAIT_MS = 500;
+/**
+ * A real toast click passes through the Action Center, and when it dismisses,
+ * Windows restores foreground to the app that had it before the click (Edge,
+ * a browser, whatever). That restoration lands AFTER our raise succeeds and
+ * silently undoes it. So after a successful raise, check back shortly and
+ * re-raise once if focus was taken away again. One retry only - never a war.
+ */
+const RECLAIM_CHECK_MS = [700, 1600];
 
 /**
  * Handle a toast click delivered as a vscode:// URI:
@@ -65,6 +73,9 @@ async function raiseExternal(deps: FocusDeps, hwnd: string): Promise<void> {
   const result = await run(deps, ["-Mode", "raise", "-Hwnd", hwnd]);
   if (result.foreground) {
     deps.log(`external terminal raised via ${result.strategy}`);
+    // Same Action Center restore hazard as the VS Code raise; the retry is a
+    // visual no-op when the terminal already holds the foreground.
+    setTimeout(() => void run(deps, ["-Mode", "raise", "-Hwnd", hwnd]), 1200);
   } else {
     deps.log("external terminal did not take focus (window may be gone)");
   }
@@ -81,26 +92,34 @@ export async function raiseWindow(deps: FocusDeps): Promise<void> {
   }
   if (await confirmFocused(SELF_RAISE_WAIT_MS)) {
     deps.log("window raised itself during URI activation; skipping the Win32 raise");
+    armReclaimGuard(deps);
     return;
   }
+  if (await doRaise(deps)) {
+    armReclaimGuard(deps);
+  }
+}
+
+/** Run the title-match + ladder raise once. True when this window took focus. */
+async function doRaise(deps: FocusDeps): Promise<boolean> {
   const titleHint = vscode.workspace.name;
   if (!titleHint) {
     deps.log("no workspace name available; cannot identify the window to raise");
-    return;
+    return false;
   }
 
   const first = await run(deps, ["-Mode", "auto", "-TitleContains", titleHint]);
   if (first.raised) {
     if (first.foreground) {
       deps.log(`raised window via ${first.strategy}`);
-    } else {
-      deps.log("Windows refused every raise strategy; the window stayed behind");
+      return true;
     }
-    return;
+    deps.log("Windows refused every raise strategy; the window stayed behind");
+    return false;
   }
   if (first.candidates.length === 0) {
     deps.log(`no VS Code window title contained "${titleHint}"`);
-    return;
+    return false;
   }
 
   // Several windows share this folder name. Raise them one at a time, most
@@ -112,11 +131,27 @@ export async function raiseWindow(deps: FocusDeps): Promise<void> {
     await run(deps, ["-Mode", "raise", "-Hwnd", candidate.hwnd]);
     if (await confirmFocused(FOCUS_CONFIRM_MS)) {
       deps.log(`raised the correct window: ${candidate.title}`);
-      return;
+      return true;
     }
     deps.log(`not our window: ${candidate.title}`);
   }
   deps.log("could not identify this window among the candidates");
+  return false;
+}
+
+/** Re-raise once if the Action Center dismissal hands focus back to the old app. */
+function armReclaimGuard(deps: FocusDeps): void {
+  let reraised = false;
+  for (const delay of RECLAIM_CHECK_MS) {
+    setTimeout(() => {
+      if (reraised || vscode.window.state.focused) {
+        return;
+      }
+      reraised = true;
+      deps.log(`focus was taken back ~${delay}ms after the raise (Action Center restore); re-raising once`);
+      void doRaise(deps);
+    }, delay);
+  }
 }
 
 /** Basename of the active editor; VS Code puts it at the front of the title. */

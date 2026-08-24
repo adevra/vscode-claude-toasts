@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.3
+
+- Fix: clicking a toast while another app (e.g. Edge) was in the foreground could
+  leave that app on top. When the Action Center dismisses, Windows restores
+  foreground to the previously focused app, undoing the raise after it succeeded.
+  A reclaim guard now checks ~0.7s and ~1.6s after a successful raise and
+  re-raises once if focus was taken back. Applies to external terminal raises
+  too. One retry only - never a focus war.
+
 ## 0.4.2
 
 - Removed the large body icon (appLogoOverride) from toasts; the small app icon
