@@ -12,6 +12,7 @@ import {
   isFullyInstalled,
   removeHooksFromFile,
 } from "./hookInstaller";
+import { pruneDeadEntries, removeLiveEntry, writeLiveEntry } from "./liveRegistry";
 import { createNotifier } from "./notifier/factory";
 import { Notifier } from "./notifier/index";
 import { evaluateEvent, ToastGate } from "./notificationPolicy";
@@ -78,6 +79,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   envCol.replace("CLAUDE_TOASTS_TOKEN", server.token);
   log.appendLine(`pipe ready: ${server.pipePath}`);
 
+  // Publish this window to the live registry so terminals whose injected pipe
+  // address went stale (extension reload) can still find us.
+  const storageDir = context.globalStorageUri.fsPath;
+  const pruned = pruneDeadEntries(storageDir, process.pid);
+  if (pruned > 0) {
+    log.appendLine(`pruned ${pruned} dead window entr${pruned === 1 ? "y" : "ies"}`);
+  }
+  const liveFile = writeLiveEntry(storageDir, {
+    pipe: server.pipePath,
+    token: server.token,
+    pid: process.pid,
+    folders: (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath),
+  });
+  context.subscriptions.push({ dispose: () => removeLiveEntry(liveFile) });
+
   // --- URI handler: toast click -> focus terminal -----------------------
   context.subscriptions.push(
     vscode.window.registerUriHandler({
@@ -100,7 +116,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
   );
 
-  registerCommands(context, { notifier, cfg: () => cfg, hookPath, dormant: false });
+  registerCommands(context, {
+    notifier,
+    cfg: () => cfg,
+    hookPath,
+    dormant: false,
+    diagnostics: () => [
+      `pipe        : ${server.pipePath}`,
+      `registry    : ${path.join(storageDir, "live")}`,
+      `hook script : ${hookPath}`,
+      `sessions    : ${registry.size}`,
+      ...registry
+        .list()
+        .map((s) => `  - ${s.sessionId.slice(0, 8)} cwd=${s.cwd ?? "?"} terminal=${s.terminal ? "bound" : "none"}`),
+      `window focus: ${vscode.window.state.focused}`,
+      `config      : ${JSON.stringify(cfg)}`,
+    ],
+  });
 
   // --- install hooks (with first-run consent) ---------------------------
   await ensureHooks(context, hookPath, false);
@@ -213,11 +245,19 @@ interface CommandDeps {
   cfg: () => ExtensionConfig;
   hookPath?: string;
   dormant: boolean;
+  diagnostics?: () => string[];
 }
 
 function registerCommands(context: vscode.ExtensionContext, deps: CommandDeps): void {
   context.subscriptions.push(
     vscode.commands.registerCommand("claudeToasts.showLog", () => log.show()),
+    vscode.commands.registerCommand("claudeToasts.diagnostics", async () => {
+      const lines = deps.diagnostics ? deps.diagnostics() : ["Claude Toasts is dormant in this window."];
+      log.appendLine("");
+      log.appendLine("=== diagnostics ===");
+      lines.forEach((l) => log.appendLine(l));
+      log.show();
+    }),
     vscode.commands.registerCommand("claudeToasts.sendTestNotification", async () => {
       if (!deps.notifier.available) {
         vscode.window.showWarningMessage("Claude Code Toasts: no toast backend on this platform.");

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.3
+
+- Fix: terminals stopped delivering notifications after an extension update or
+  window reload. Each activation created a new named pipe, but terminals hold the
+  address injected at launch, so they wrote into a dead pipe and failed silently.
+  The extension now publishes a live-window registry next to the hook script, and
+  the hook falls back to it (matching the window whose workspace folder contains
+  the session cwd) whenever its injected address is stale.
+- Terminals opened before the extension activated now work too, via the same
+  fallback - this was previously a documented limitation.
+- New command: Claude Toasts: Diagnostics, dumping pipe, registry, sessions and
+  config to the log.
+
 ## 0.1.2
 
 - New icon: a toasted slice branded with the Claude burst, used for the
