@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.1
+
+- Background-job sessions (daemon-spawned, no terminal in their process
+  ancestry) now get watching-suppression via a cwd fallback: no toast when the
+  window is focused and the active terminal's cwd is the session's cwd. Applies
+  only to sessions without an exact binding, so precisely-bound terminal
+  sessions keep exact suppression and two same-folder terminal sessions never
+  mute each other. Trade-off: two background sessions sharing one folder are
+  muted together while you watch either.
+- Diagnostics now labels each session's binding: vscode-terminal,
+  external(hwnd), background (cwd fallback), heuristic, or unresolved.
+
 ## 0.4.0
 
 - Sessions running in standalone terminals (Windows Terminal, etc.) are now

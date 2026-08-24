@@ -9,8 +9,13 @@ export interface SessionInfo {
   completedToastShownThisTurn?: boolean;
   /** Window handle of the standalone terminal hosting this session, if external. */
   externalHwnd?: string;
-  /** True once the ppid ancestry walk has resolved this session's home. */
-  bindingResolved?: boolean;
+  /**
+   * Result of the ppid ancestry walk. "terminal": exact VS Code terminal bound.
+   * "external": standalone terminal window. "unknown": walk found no terminal
+   * (daemon-spawned background jobs) - the cwd watching fallback applies.
+   * Unset: walk not attempted yet.
+   */
+  bindingKind?: "terminal" | "external" | "unknown";
 }
 
 /** Normalize a path for loose comparison: lowercase, forward slashes, no trailing slash. */
@@ -58,19 +63,22 @@ export class SessionRegistry {
     return info;
   }
 
-  /** Exact binding from the process-ancestry walk; overrides the cwd heuristic. */
+  /** Record the ancestry walk's outcome; exact results override the cwd heuristic. */
   applyBinding(sessionId: string, terminal: vscode.Terminal | undefined, externalHwnd: string | undefined): void {
     const info = this.sessions.get(sessionId);
     if (!info) {
       return;
     }
-    info.bindingResolved = true;
     if (terminal) {
+      info.bindingKind = "terminal";
       info.terminal = terminal;
       info.externalHwnd = undefined;
     } else if (externalHwnd) {
+      info.bindingKind = "external";
       info.terminal = undefined;
       info.externalHwnd = externalHwnd;
+    } else {
+      info.bindingKind = "unknown";
     }
   }
 

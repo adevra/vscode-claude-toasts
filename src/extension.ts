@@ -141,8 +141,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         .map(
           (s) =>
             `  - ${s.sessionId.slice(0, 8)} cwd=${s.cwd ?? "?"} binding=${
-              s.terminal ? "vscode-terminal" : s.externalHwnd ? `external(hwnd ${s.externalHwnd})` : "none"
-            }${s.bindingResolved ? "" : " (heuristic)"}`,
+              s.bindingKind === "terminal"
+                ? "vscode-terminal"
+                : s.bindingKind === "external"
+                  ? `external(hwnd ${s.externalHwnd})`
+                  : s.bindingKind === "unknown"
+                    ? "background (cwd fallback)"
+                    : s.terminal
+                      ? "heuristic terminal"
+                      : "unresolved"
+            }`,
         ),
       `window focus: ${vscode.window.state.focused}`,
       `config      : ${JSON.stringify(cfg)}`,
@@ -298,7 +306,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         registry.applyBinding(sessionId, undefined, binding.hwnd);
         log.appendLine(`[bind] ${sessionId.slice(0, 8)} -> external terminal window (hwnd ${binding.hwnd})`);
       } else {
-        log.appendLine(`[bind] ${sessionId.slice(0, 8)} -> no terminal found in ancestry; keeping heuristic binding`);
+        registry.applyBinding(sessionId, undefined, undefined);
+        log.appendLine(
+          `[bind] ${sessionId.slice(0, 8)} -> no terminal in ancestry (background job); using cwd watching fallback`,
+        );
       }
       statusBar.refresh();
     } catch (e) {
@@ -306,12 +317,28 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
   }
 
-  function buildContext(ev: HookEvent, info: { terminal?: vscode.Terminal; turnStartedAt?: number; completedToastShownThisTurn?: boolean }): PolicyContext {
+  function buildContext(
+    ev: HookEvent,
+    info: {
+      terminal?: vscode.Terminal;
+      turnStartedAt?: number;
+      completedToastShownThisTurn?: boolean;
+      bindingKind?: "terminal" | "external" | "unknown";
+    },
+  ): PolicyContext {
     const repo = findRepoInfo(ev.cwd);
     const explicit = colorReader.read(ev.session_id ?? "", ev.transcript_path);
+    const exactActive = !!info.terminal && info.terminal === vscode.window.activeTerminal;
+    // Background jobs (and sessions the walk hasn't classified) have no reliable
+    // terminal link, so "watching" falls back to: the active terminal's cwd is
+    // the session's cwd. Exactly-bound and external sessions never use this.
+    const cwdWatch =
+      info.bindingKind !== "terminal" &&
+      info.bindingKind !== "external" &&
+      terminalCwdMatches(vscode.window.activeTerminal, ev.cwd);
     return {
       windowFocused: vscode.window.state.focused,
-      isBoundTerminalActive: !!info.terminal && info.terminal === vscode.window.activeTerminal,
+      isBoundTerminalActive: info.bindingKind === "external" ? false : exactActive || cwdWatch,
       turnStartedAt: info.turnStartedAt,
       folderName: pickFolderName(ev.cwd),
       completedToastShownThisTurn: info.completedToastShownThisTurn === true,
@@ -349,7 +376,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
 
     const info = registry.resolve(sid, ev.cwd);
-    if (!info.bindingResolved) {
+    if (!info.bindingKind) {
       void resolveBinding(sid, ev.claude_pid);
     }
     const ctx = buildContext(ev, info);
@@ -597,4 +624,14 @@ function ensureColorStrips(storageDir: string): void {
       }
     },
   );
+}
+
+/** Does this terminal's shell-integration cwd equal the session's cwd? */
+function terminalCwdMatches(terminal: vscode.Terminal | undefined, cwd: string | null): boolean {
+  const termCwd = terminal?.shellIntegration?.cwd?.fsPath;
+  if (!termCwd || !cwd) {
+    return false;
+  }
+  const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+  return norm(termCwd) === norm(cwd);
 }
