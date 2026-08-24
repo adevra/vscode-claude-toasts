@@ -37,7 +37,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(statusBar);
 
   const assetDir = path.join(context.extensionUri.fsPath, "dist");
-  const notifier: Notifier = createNotifier({ assetDir, appId: APP_ID, log: (m) => log.appendLine(m) });
+  const iconPath = deployAsset(context, "claude-logo.png");
+  const notifier: Notifier = createNotifier({ assetDir, appId: APP_ID, iconPath, log: (m) => log.appendLine(m) });
   context.subscriptions.push({ dispose: () => notifier.dispose() });
 
   // --- dormant paths: nothing to toast with -----------------------------
@@ -56,7 +57,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   // --- register our AUMID so Windows shows/attributes toasts -------------
   try {
-    await registerAppId(APP_ID, APP_DISPLAY_NAME);
+    await registerAppId(APP_ID, APP_DISPLAY_NAME, iconPath);
   } catch (e) {
     log.appendLine(`AUMID registration failed: ${(e as Error).message}`);
   }
@@ -168,14 +169,19 @@ export function deactivate(): void {
 // --- helpers ----------------------------------------------------------------
 
 function deployHookScript(context: vscode.ExtensionContext): string {
+  return deployAsset(context, HOOK_SCRIPT_BASENAME);
+}
+
+/** Copy a bundled dist/ asset into stable globalStorage and return its path. */
+function deployAsset(context: vscode.ExtensionContext, basename: string): string {
   const dir = context.globalStorageUri.fsPath;
   fs.mkdirSync(dir, { recursive: true });
-  const dest = path.join(dir, HOOK_SCRIPT_BASENAME);
-  const src = path.join(context.extensionUri.fsPath, "dist", HOOK_SCRIPT_BASENAME);
+  const dest = path.join(dir, basename);
+  const src = path.join(context.extensionUri.fsPath, "dist", basename);
   try {
     fs.copyFileSync(src, dest);
   } catch (e) {
-    log.appendLine(`could not deploy hook script: ${(e as Error).message}`);
+    log.appendLine(`could not deploy ${basename}: ${(e as Error).message}`);
   }
   return dest;
 }

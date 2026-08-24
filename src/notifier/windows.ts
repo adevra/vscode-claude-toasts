@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import * as path from "node:path";
+import { pathToFileURL } from "node:url";
 import { Notifier, NotifierDeps, ToastRequest } from "./index";
 
 const GROUP = "claude-toasts";
@@ -17,7 +18,7 @@ export class WindowsNotifier implements Notifier {
   }
 
   show(req: ToastRequest): Promise<void> {
-    const xml = buildToastXml(req);
+    const xml = buildToastXml(req, this.deps.iconPath);
     const b64 = Buffer.from(xml, "utf8").toString("base64");
     const tag = shortTag(req.tag);
     const args = [
@@ -64,18 +65,21 @@ function xmlEscape(s: string): string {
     .replace(/'/g, "&apos;");
 }
 
-export function buildToastXml(req: ToastRequest): string {
+export function buildToastXml(req: ToastRequest, iconPath?: string): string {
   const scenario = req.sticky ? ' scenario="urgent"' : "";
   const launch = req.launchUri ? ` launch="${xmlEscape(req.launchUri)}"` : "";
   const audio = req.sound ? "" : '\n  <audio silent="true"/>';
   const title = xmlEscape(req.title);
   const body = xmlEscape(req.body || " ");
+  const logo = iconPath
+    ? `\n      <image placement="appLogoOverride" src="${xmlEscape(pathToFileURL(iconPath).href)}"/>`
+    : "";
   return (
     `<toast activationType="protocol"${launch}${scenario}>\n` +
     `  <visual>\n` +
     `    <binding template="ToastGeneric">\n` +
     `      <text>${title}</text>\n` +
-    `      <text>${body}</text>\n` +
+    `      <text>${body}</text>${logo}\n` +
     `    </binding>\n` +
     `  </visual>${audio}\n` +
     `</toast>`
