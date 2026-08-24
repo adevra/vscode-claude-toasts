@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.4
+
+- Fix: clicking a toast revealed the right terminal but did not raise the VS Code
+  window. Windows grants foreground rights to the Code.exe the shell spawns to
+  forward the vscode:// URI, and that process exits immediately, so the running
+  window stayed behind. The extension now raises its own window explicitly via
+  Win32 (EnumWindows title match, then SwitchToThisWindow / AttachThreadInput).
+- Fix: a redundant second toast ("Waiting for your input") arrived ~60s after a
+  completed turn. Claude Code emits idle_prompt when you do not reply; it is now
+  suppressed when a completion toast already fired for that same turn. It still
+  fires when the completion toast was suppressed, and never mutes permission
+  prompts.
+
 ## 0.1.3
 
 - Fix: terminals stopped delivering notifications after an extension update or

@@ -50,6 +50,12 @@ export interface PolicyContext {
   turnStartedAt?: number;
   /** Short folder name for the toast title. */
   folderName: string;
+  /**
+   * True once a completion toast has been shown for the current turn. Claude Code
+   * emits an idle_prompt ~60s after a turn ends; if we already said the turn
+   * finished, repeating "waiting for your input" adds nothing.
+   */
+  completedToastShownThisTurn?: boolean;
   config: PolicyConfig;
 }
 

@@ -11,6 +11,7 @@ function copyAssets() {
   const assets = [
     ["hook/hook.js", "dist/claude-toasts-hook.js"],
     ["media/show-toast.ps1", "dist/show-toast.ps1"],
+    ["media/focus-window.ps1", "dist/focus-window.ps1"],
     ["media/icon.png", "dist/icon.png"],
   ];
   for (const [from, to] of assets) {

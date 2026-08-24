@@ -97,7 +97,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // --- URI handler: toast click -> focus terminal -----------------------
   context.subscriptions.push(
     vscode.window.registerUriHandler({
-      handleUri: (uri) => handleFocusUri(uri, registry, (m) => log.appendLine(`[focus] ${m}`)),
+      handleUri: (uri) =>
+        handleFocusUri(uri, { assetDir, registry, log: (m) => log.appendLine(`[focus] ${m}`) }),
     }),
   );
 
@@ -164,6 +165,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       isBoundTerminalActive: !!info.terminal && info.terminal === vscode.window.activeTerminal,
       turnStartedAt: info.turnStartedAt,
       folderName: pickFolderName(ev.cwd),
+      completedToastShownThisTurn: info.completedToastShownThisTurn === true,
       config: cfg,
     };
 
@@ -190,6 +192,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       tag: decision.dedupKey,
       launchUri,
     });
+    if (decision.kind === "complete") {
+      registry.markCompletedToastShown(sid);
+    }
     log.appendLine(`[toast] ${decision.title} — ${decision.body}`);
   }
 }

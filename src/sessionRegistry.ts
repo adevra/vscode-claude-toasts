@@ -5,6 +5,8 @@ export interface SessionInfo {
   cwd: string | null;
   terminal?: vscode.Terminal;
   turnStartedAt?: number;
+  /** Set when a completion toast fires; cleared when the next turn starts. */
+  completedToastShownThisTurn?: boolean;
 }
 
 /** Normalize a path for loose comparison: lowercase, forward slashes, no trailing slash. */
@@ -31,6 +33,7 @@ export class SessionRegistry {
     const existing = this.sessions.get(sessionId);
     if (existing) {
       existing.turnStartedAt = ts;
+      existing.completedToastShownThisTurn = false;
       if (!existing.terminal) {
         existing.terminal = this.pickTerminal(cwd ?? existing.cwd);
       }
@@ -49,6 +52,13 @@ export class SessionRegistry {
       info.terminal = this.pickTerminal(cwd ?? info.cwd);
     }
     return info;
+  }
+
+  markCompletedToastShown(sessionId: string): void {
+    const info = this.sessions.get(sessionId);
+    if (info) {
+      info.completedToastShownThisTurn = true;
+    }
   }
 
   onSessionEnd(sessionId: string): void {

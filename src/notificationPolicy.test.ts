@@ -126,6 +126,30 @@ describe("evaluateEvent — Notification", () => {
     expect("decision" in r).toBe(true);
   });
 
+  it("suppresses the idle nag when we already toasted this turn's completion", () => {
+    const r = evaluateEvent(
+      ev({ hook_event_name: "Notification", notification_type: "idle_prompt" }),
+      ctx({ completedToastShownThisTurn: true }),
+    );
+    expect(reason(r)).toMatch(/already notified/);
+  });
+
+  it("still fires idle when the completion toast was suppressed", () => {
+    const r = evaluateEvent(
+      ev({ hook_event_name: "Notification", notification_type: "idle_prompt" }),
+      ctx({ completedToastShownThisTurn: false }),
+    );
+    expect("decision" in r).toBe(true);
+  });
+
+  it("does not let a completed turn mute a permission prompt", () => {
+    const r = evaluateEvent(
+      ev({ hook_event_name: "Notification", notification_type: "permission_prompt" }),
+      ctx({ completedToastShownThisTurn: true }),
+    );
+    expect("decision" in r).toBe(true);
+  });
+
   it("respects the notifyOnNeedsInput toggle", () => {
     const r = evaluateEvent(
       ev({ hook_event_name: "Notification", notification_type: "idle_prompt" }),

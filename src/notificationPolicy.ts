@@ -103,6 +103,9 @@ export function evaluateEvent(event: HookEvent, ctx: PolicyContext): PolicyResul
       if (!BLOCKING_NOTIFICATION_TYPES.includes(nt as never)) {
         return suppressed(`ignored notification_type: ${nt ?? "none"}`);
       }
+      if (nt === "idle_prompt" && ctx.completedToastShownThisTurn) {
+        return suppressed("already notified that this turn finished");
+      }
       if (isUserWatching(ctx)) {
         return suppressed("user is watching the session terminal");
       }
