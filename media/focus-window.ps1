@@ -1,5 +1,7 @@
 param(
-  [Parameter(Mandatory = $true)][string]$TitleContains,
+  [ValidateSet("auto", "list", "raise")][string]$Mode = "auto",
+  [string]$TitleContains = "",
+  [string]$Hwnd = "",
   [string]$ProcessName = "Code"
 )
 
@@ -8,7 +10,17 @@ param(
 # VS Code has no API for a window to raise itself, and when a toast is clicked
 # Windows hands foreground rights to the newly spawned Code.exe (which merely
 # forwards the vscode:// URI and exits), not to the already-running instance.
-# So the window handles the URI but stays behind. We do the raise explicitly.
+# So the window handles the URI but stays behind; we do the raise explicitly.
+#
+# One Code.exe process owns every window, so the window cannot be identified by
+# PID - only by title. When several windows match (two folders with the same
+# name), this script reports the candidates and the extension disambiguates by
+# raising them one at a time and checking which one made itself focused.
+#
+# Modes:
+#   auto  - match on title; raise only if exactly one candidate, else list them
+#   list  - report candidates, raise nothing
+#   raise - raise the given -Hwnd
 
 $ErrorActionPreference = "Stop"
 
@@ -42,14 +54,41 @@ public class CtWin {
 }
 "@
 
-# Collect PIDs belonging to the target process so we only consider its windows.
+function Raise-Window([IntPtr]$h) {
+  if ([CtWin]::IsIconic($h)) { [void][CtWin]::ShowWindow($h, 9) }  # SW_RESTORE
+  [void][CtWin]::SwitchToThisWindow($h, $true)
+  if ([CtWin]::GetForegroundWindow() -ne $h) {
+    [void][CtWin]::BringWindowToTop($h)
+    [void][CtWin]::SetForegroundWindow($h)
+  }
+  if ([CtWin]::GetForegroundWindow() -ne $h) {
+    $fg = [CtWin]::GetForegroundWindow()
+    $fgPid = [uint32]0
+    $fgThread = [CtWin]::GetWindowThreadProcessId($fg, [ref]$fgPid)
+    $me = [CtWin]::GetCurrentThreadId()
+    if ([CtWin]::AttachThreadInput($me, $fgThread, $true)) {
+      [void][CtWin]::BringWindowToTop($h)
+      [void][CtWin]::SetForegroundWindow($h)
+      [void][CtWin]::AttachThreadInput($me, $fgThread, $false)
+    }
+  }
+  return ([CtWin]::GetForegroundWindow() -eq $h)
+}
+
+if ($Mode -eq "raise") {
+  if (-not $Hwnd) { Write-Output "error=no-hwnd"; exit 2 }
+  $h = [IntPtr][int64]$Hwnd
+  $ok = Raise-Window $h
+  Write-Output ("raised=" + $Hwnd)
+  Write-Output ("foreground=" + $ok)
+  if ($ok) { exit 0 } else { exit 1 }
+}
+
 $pids = @{}
 Get-Process -Name $ProcessName -ErrorAction SilentlyContinue | ForEach-Object { $pids[[uint32]$_.Id] = $true }
-if ($pids.Count -eq 0) { Write-Output "no-process"; exit 2 }
+if ($pids.Count -eq 0) { Write-Output "error=no-process"; exit 2 }
 
-$found = [IntPtr]::Zero
-$foundTitle = ""
-
+$script:matches = New-Object System.Collections.ArrayList
 $callback = [CtWin+EnumWindowsProc]{
   param($hWnd, $lParam)
   if (-not [CtWin]::IsWindowVisible($hWnd)) { return $true }
@@ -58,40 +97,25 @@ $callback = [CtWin+EnumWindowsProc]{
   if (-not $pids.ContainsKey($wpid)) { return $true }
   $t = [CtWin]::Title($hWnd)
   if ([string]::IsNullOrEmpty($t)) { return $true }
-  if ($t -like "*$TitleContains*") {
-    $script:found = $hWnd
-    $script:foundTitle = $t
-    return $false   # stop enumerating
+  if ($TitleContains -eq "" -or $t -like "*$TitleContains*") {
+    [void]$script:matches.Add([pscustomobject]@{ H = $hWnd; T = $t })
   }
   return $true
 }
 [void][CtWin]::EnumWindows($callback, [IntPtr]::Zero)
 
-if ($found -eq [IntPtr]::Zero) { Write-Output "no-window"; exit 3 }
-
-# Restore if minimized, then try progressively more forceful raises. Foreground
-# lock means SetForegroundWindow alone often silently fails from a background
-# process; SwitchToThisWindow and the AttachThreadInput dance work around it.
-if ([CtWin]::IsIconic($found)) { [void][CtWin]::ShowWindow($found, 9) }  # SW_RESTORE
-
-[void][CtWin]::SwitchToThisWindow($found, $true)
-if ([CtWin]::GetForegroundWindow() -ne $found) {
-  [void][CtWin]::BringWindowToTop($found)
-  [void][CtWin]::SetForegroundWindow($found)
+Write-Output ("count=" + $script:matches.Count)
+foreach ($m in $script:matches) {
+  Write-Output ("hwnd=" + [int64]$m.H + "|title=" + $m.T)
 }
-if ([CtWin]::GetForegroundWindow() -ne $found) {
-  $fg = [CtWin]::GetForegroundWindow()
-  $fgPid = [uint32]0
-  $fgThread = [CtWin]::GetWindowThreadProcessId($fg, [ref]$fgPid)
-  $me = [CtWin]::GetCurrentThreadId()
-  if ([CtWin]::AttachThreadInput($me, $fgThread, $true)) {
-    [void][CtWin]::BringWindowToTop($found)
-    [void][CtWin]::SetForegroundWindow($found)
-    [void][CtWin]::AttachThreadInput($me, $fgThread, $false)
-  }
+if ($script:matches.Count -eq 0) { exit 3 }
+
+if ($Mode -eq "auto" -and $script:matches.Count -eq 1) {
+  $ok = Raise-Window ($script:matches[0].H)
+  Write-Output ("raised=" + [int64]$script:matches[0].H)
+  Write-Output ("foreground=" + $ok)
+  if ($ok) { exit 0 } else { exit 1 }
 }
 
-$ok = [CtWin]::GetForegroundWindow() -eq $found
-Write-Output ("target=" + $foundTitle)
-Write-Output ("foreground=" + $ok)
-if ($ok) { exit 0 } else { exit 1 }
+# Ambiguous (or list mode): caller decides.
+exit 0

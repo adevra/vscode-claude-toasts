@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.5
+
+- Window raise now disambiguates when several windows share a folder name. The
+  helper reports all matching windows instead of guessing; the extension orders
+  them by which one shows its active editor, raises them one at a time, and asks
+  VS Code which window actually took focus. Correct by construction rather than
+  by title heuristics. Single-match windows keep the old one-shot fast path.
+
 ## 0.1.4
 
 - Fix: clicking a toast revealed the right terminal but did not raise the VS Code

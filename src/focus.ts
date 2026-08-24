@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { FocusResult, parseFocusOutput, rankCandidates } from "./focusParse";
 import { SessionRegistry } from "./sessionRegistry";
 
 export interface FocusDeps {
@@ -9,6 +10,9 @@ export interface FocusDeps {
   registry: SessionRegistry;
   log(message: string): void;
 }
+
+const RAISE_TIMEOUT_MS = 5000;
+const FOCUS_CONFIRM_MS = 400;
 
 /**
  * Handle a toast click delivered as a vscode:// URI:
@@ -33,11 +37,11 @@ export function handleFocusUri(uri: vscode.Uri, deps: FocusDeps): void {
       deps.log(`clicked toast for session ${sessionId} but no terminal is bound`);
     }
   }
-  raiseWindow(deps);
+  void raiseWindow(deps);
 }
 
 /** Bring this VS Code window to the foreground (Windows only; no-op elsewhere). */
-export function raiseWindow(deps: FocusDeps): void {
+export async function raiseWindow(deps: FocusDeps): Promise<void> {
   if (process.platform !== "win32") {
     return;
   }
@@ -45,23 +49,79 @@ export function raiseWindow(deps: FocusDeps): void {
     deps.log("window already focused; no raise needed");
     return;
   }
-  const title = vscode.workspace.name;
-  if (!title) {
+  const titleHint = vscode.workspace.name;
+  if (!titleHint) {
     deps.log("no workspace name available; cannot identify the window to raise");
     return;
   }
-  const script = path.join(deps.assetDir, "focus-window.ps1");
-  execFile(
-    "powershell.exe",
-    ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, "-TitleContains", title],
-    { timeout: 5000, windowsHide: true },
-    (err, stdout, stderr) => {
-      const out = `${stdout ?? ""}${stderr ?? ""}`.trim().replace(/\s+/g, " ");
-      if (err) {
-        deps.log(`raise window failed (${err.message}) ${out}`);
-      } else {
-        deps.log(`raise window: ${out}`);
+
+  const first = await run(deps, ["-Mode", "auto", "-TitleContains", titleHint]);
+  if (first.raised) {
+    deps.log(`raised window (single match, foreground=${first.foreground})`);
+    return;
+  }
+  if (first.candidates.length === 0) {
+    deps.log(`no VS Code window title contained "${titleHint}"`);
+    return;
+  }
+
+  // Several windows share this folder name. Raise them one at a time, most
+  // likely first, and let VS Code itself tell us which one is ours.
+  const ordered = rankCandidates(first.candidates, activeEditorHint());
+  deps.log(`${ordered.length} windows match "${titleHint}"; disambiguating by focus check`);
+
+  for (const candidate of ordered) {
+    await run(deps, ["-Mode", "raise", "-Hwnd", candidate.hwnd]);
+    if (await confirmFocused(FOCUS_CONFIRM_MS)) {
+      deps.log(`raised the correct window: ${candidate.title}`);
+      return;
+    }
+    deps.log(`not our window: ${candidate.title}`);
+  }
+  deps.log("could not identify this window among the candidates");
+}
+
+/** Basename of the active editor; VS Code puts it at the front of the title. */
+function activeEditorHint(): string | undefined {
+  const doc = vscode.window.activeTextEditor?.document;
+  return doc ? path.basename(doc.fileName) : undefined;
+}
+
+/** Resolve true if this window reports focus within the timeout. */
+function confirmFocused(timeoutMs: number): Promise<boolean> {
+  if (vscode.window.state.focused) {
+    return Promise.resolve(true);
+  }
+  return new Promise((resolve) => {
+    const sub = vscode.window.onDidChangeWindowState((s) => {
+      if (s.focused) {
+        clearTimeout(timer);
+        sub.dispose();
+        resolve(true);
       }
-    },
-  );
+    });
+    const timer = setTimeout(() => {
+      sub.dispose();
+      resolve(vscode.window.state.focused);
+    }, timeoutMs);
+  });
+}
+
+function run(deps: FocusDeps, args: string[]): Promise<FocusResult> {
+  const script = path.join(deps.assetDir, "focus-window.ps1");
+  return new Promise((resolve) => {
+    execFile(
+      "powershell.exe",
+      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", script, ...args],
+      { timeout: RAISE_TIMEOUT_MS, windowsHide: true },
+      (err, stdout, stderr) => {
+        if (err && !stdout) {
+          deps.log(`focus helper failed: ${err.message} ${(stderr ?? "").trim()}`);
+          resolve({ candidates: [], raised: false, foreground: false });
+          return;
+        }
+        resolve(parseFocusOutput(stdout ?? ""));
+      },
+    );
+  });
 }
