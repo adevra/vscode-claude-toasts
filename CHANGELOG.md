@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.4
+
+- The reply box is now opt-in: claudeToasts.replyBox defaults to off.
+
 ## 0.5.3
 
 - Publisher changed to duron; extension id is now duron.vscode-claude-toasts.

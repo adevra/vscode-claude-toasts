@@ -12,8 +12,8 @@ leaving the notification.
   message. Quick turns (under 20s by default) stay quiet.
 - **Claude needs you** — a sticky, high-urgency toast when Claude is blocked on
   a permission prompt, has gone idle, or explicitly needs input.
-- **Reply from the toast** — completion and needs-input toasts carry a text box
-  and a Send button. What you type is sent into that session's terminal as your
+- **Reply from the toast** (opt-in: `claudeToasts.replyBox`) — completion and
+  needs-input toasts carry a text box and a Send button. What you type is sent into that session's terminal as your
   next prompt, submitted. Powered by a tiny helper compiled on your machine at
   first use (Windows' own `csc.exe`, no bundled binaries) that runs only while a
   reply toast is recent — zero steady-state cost.
@@ -79,7 +79,7 @@ All under `claudeToasts.*`:
 | `enabled` | `true` | master switch |
 | `notifyOnComplete` | `true` | toast when a turn ends |
 | `notifyOnNeedsInput` | `true` | toast when Claude is blocked on you |
-| `replyBox` | `true` | text box + Send on toasts |
+| `replyBox` | `false` | opt-in: text box + Send on toasts |
 | `minTurnDurationSeconds` | `20` | skip toasts for quick turns |
 | `suppressWhenActiveTerminal` | `true` | stay quiet while you watch |
 | `messagePreviewLength` | `120` | characters of Claude's message shown |

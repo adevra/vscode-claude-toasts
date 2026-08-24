@@ -2,7 +2,7 @@
   "name": "vscode-claude-toasts",
   "displayName": "Claude Code Toasts",
   "description": "Native desktop notifications when Claude Code finishes a turn or needs your input, driven by Claude Code hooks.",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "publisher": "duron",
   "license": "MIT",
   "engines": {
@@ -100,8 +100,8 @@
         },
         "claudeToasts.replyBox": {
           "type": "boolean",
-          "default": true,
-          "description": "Show a reply text box on completion and needs-input toasts. Typing there sends the text into the session's terminal. Uses a small helper process that runs only while a reply toast is recent."
+          "default": false,
+          "description": "Opt-in: show a reply text box and Send button on completion and needs-input toasts. Typed text is sent into the session terminal. Uses a small helper process that runs only while a reply toast is recent."
         }
       }
     }
