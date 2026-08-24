@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.2.1
+
+- Fix: clicking a toast found the right window but Windows refused to raise it.
+  A background process may not call SetForegroundWindow, and the previous two
+  fallbacks were not enough. The helper now walks a ladder of seven strategies -
+  SetForegroundWindow, SwitchToThisWindow, AttachThreadInput, a synthetic ALT tap,
+  temporarily zeroing the system foreground-lock timeout, a topmost flicker, and
+  finally minimize+restore - and logs which one Windows honored (strategy=...).
+
 ## 0.2.0
 
 - **Approve or deny a permission request straight from the toast.** Permission

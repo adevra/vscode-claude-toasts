@@ -8,19 +8,18 @@ param(
 # Raise a specific VS Code window to the foreground.
 #
 # VS Code has no API for a window to raise itself, and when a toast is clicked
-# Windows hands foreground rights to the newly spawned Code.exe (which merely
-# forwards the vscode:// URI and exits), not to the already-running instance.
-# So the window handles the URI but stays behind; we do the raise explicitly.
+# Windows hands foreground rights to the Code.exe the shell spawned to forward the
+# vscode:// URI - which exits immediately. So the window handles the URI but stays
+# behind, and we raise it explicitly.
 #
-# One Code.exe process owns every window, so the window cannot be identified by
-# PID - only by title. When several windows match (two folders with the same
-# name), this script reports the candidates and the extension disambiguates by
-# raising them one at a time and checking which one made itself focused.
+# The catch is Windows foreground lock: a background process may not call
+# SetForegroundWindow. There is no single workaround that always works, so we walk
+# a ladder from politest to most forceful and report which rung succeeded
+# (strategy=...) so the extension log shows what this machine actually honors.
 #
-# Modes:
-#   auto  - match on title; raise only if exactly one candidate, else list them
-#   list  - report candidates, raise nothing
-#   raise - raise the given -Hwnd
+# One Code.exe process owns every window, so windows are identified by title, not
+# PID. When several match, the extension disambiguates by raising each and asking
+# VS Code which one took focus.
 
 $ErrorActionPreference = "Stop"
 
@@ -40,6 +39,12 @@ public class CtWin {
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
   [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern IntPtr SetActiveWindow(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern IntPtr SetFocus(IntPtr hWnd);
+  [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr hWnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+  [DllImport("user32.dll")] public static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
+  [DllImport("user32.dll")] public static extern bool SystemParametersInfo(uint action, uint param, ref uint vparam, uint winini);
+  [DllImport("user32.dll")] public static extern bool AllowSetForegroundWindow(int pid);
   [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowTextLength(IntPtr hWnd);
   [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder s, int n);
@@ -54,34 +59,90 @@ public class CtWin {
 }
 "@
 
+$SW_RESTORE  = 9
+$SW_MINIMIZE = 6
+$SW_SHOW     = 5
+$HWND_TOPMOST   = [IntPtr]::new(-1)
+$HWND_NOTOPMOST = [IntPtr]::new(-2)
+$SWP_NOMOVE = 0x0002
+$SWP_NOSIZE = 0x0001
+$SWP_SHOWWINDOW = 0x0040
+$VK_MENU = 0x12
+$KEYEVENTF_KEYUP = 0x0002
+$SPI_GETFOREGROUNDLOCKTIMEOUT = 0x2000
+$SPI_SETFOREGROUNDLOCKTIMEOUT = 0x2001
+$SPIF_SENDCHANGE = 0x0002
+
+function Test-Foreground([IntPtr]$h) { return ([CtWin]::GetForegroundWindow() -eq $h) }
+
 function Raise-Window([IntPtr]$h) {
-  if ([CtWin]::IsIconic($h)) { [void][CtWin]::ShowWindow($h, 9) }  # SW_RESTORE
+  if ([CtWin]::IsIconic($h)) { [void][CtWin]::ShowWindow($h, $SW_RESTORE) }
+  else { [void][CtWin]::ShowWindow($h, $SW_SHOW) }
+
+  # 1. The polite call. Works when we happen to hold foreground rights.
+  [void][CtWin]::SetForegroundWindow($h)
+  if (Test-Foreground $h) { return "setforeground" }
+
+  # 2. Shell's own switcher; often bypasses the lock.
   [void][CtWin]::SwitchToThisWindow($h, $true)
-  if ([CtWin]::GetForegroundWindow() -ne $h) {
-    [void][CtWin]::BringWindowToTop($h)
-    [void][CtWin]::SetForegroundWindow($h)
-  }
-  if ([CtWin]::GetForegroundWindow() -ne $h) {
-    $fg = [CtWin]::GetForegroundWindow()
+  if (Test-Foreground $h) { return "switchtothiswindow" }
+
+  # 3. Borrow the foreground thread's input queue, then activate.
+  $fg = [CtWin]::GetForegroundWindow()
+  if ($fg -ne [IntPtr]::Zero) {
     $fgPid = [uint32]0
     $fgThread = [CtWin]::GetWindowThreadProcessId($fg, [ref]$fgPid)
     $me = [CtWin]::GetCurrentThreadId()
-    if ([CtWin]::AttachThreadInput($me, $fgThread, $true)) {
+    if ($fgThread -ne 0 -and $fgThread -ne $me -and [CtWin]::AttachThreadInput($me, $fgThread, $true)) {
+      [void][CtWin]::AllowSetForegroundWindow(-1)
       [void][CtWin]::BringWindowToTop($h)
       [void][CtWin]::SetForegroundWindow($h)
+      [void][CtWin]::SetActiveWindow($h)
+      [void][CtWin]::SetFocus($h)
       [void][CtWin]::AttachThreadInput($me, $fgThread, $false)
+      if (Test-Foreground $h) { return "attachthreadinput" }
     }
   }
-  return ([CtWin]::GetForegroundWindow() -eq $h)
+
+  # 4. Synthetic ALT tap. Any input event resets the foreground lock, which is the
+  #    long-standing workaround for exactly this restriction.
+  [CtWin]::keybd_event([byte]$VK_MENU, 0, 0, [UIntPtr]::Zero)
+  [CtWin]::keybd_event([byte]$VK_MENU, 0, $KEYEVENTF_KEYUP, [UIntPtr]::Zero)
+  [void][CtWin]::SetForegroundWindow($h)
+  if (Test-Foreground $h) { return "altkey" }
+
+  # 5. Drop the system foreground-lock timeout, activate, then put it back.
+  $old = [uint32]0
+  if ([CtWin]::SystemParametersInfo($SPI_GETFOREGROUNDLOCKTIMEOUT, 0, [ref]$old, 0)) {
+    $zero = [uint32]0
+    [void][CtWin]::SystemParametersInfo($SPI_SETFOREGROUNDLOCKTIMEOUT, 0, [ref]$zero, $SPIF_SENDCHANGE)
+    [void][CtWin]::SetForegroundWindow($h)
+    $restore = $old
+    [void][CtWin]::SystemParametersInfo($SPI_SETFOREGROUNDLOCKTIMEOUT, 0, [ref]$restore, $SPIF_SENDCHANGE)
+    if (Test-Foreground $h) { return "locktimeout" }
+  }
+
+  # 6. Topmost flicker: at least lift it above everything visually.
+  [void][CtWin]::SetWindowPos($h, $HWND_TOPMOST, 0, 0, 0, 0, $SWP_NOMOVE -bor $SWP_NOSIZE -bor $SWP_SHOWWINDOW)
+  [void][CtWin]::SetWindowPos($h, $HWND_NOTOPMOST, 0, 0, 0, 0, $SWP_NOMOVE -bor $SWP_NOSIZE -bor $SWP_SHOWWINDOW)
+  if (Test-Foreground $h) { return "topmost" }
+
+  # 7. Last resort: a restore from minimized always activates.
+  [void][CtWin]::ShowWindow($h, $SW_MINIMIZE)
+  [void][CtWin]::ShowWindow($h, $SW_RESTORE)
+  if (Test-Foreground $h) { return "minimizerestore" }
+
+  return ""
 }
 
 if ($Mode -eq "raise") {
   if (-not $Hwnd) { Write-Output "error=no-hwnd"; exit 2 }
   $h = [IntPtr][int64]$Hwnd
-  $ok = Raise-Window $h
+  $strategy = Raise-Window $h
   Write-Output ("raised=" + $Hwnd)
-  Write-Output ("foreground=" + $ok)
-  if ($ok) { exit 0 } else { exit 1 }
+  Write-Output ("strategy=" + $strategy)
+  Write-Output ("foreground=" + [bool]$strategy)
+  if ($strategy) { exit 0 } else { exit 1 }
 }
 
 $pids = @{}
@@ -111,11 +172,11 @@ foreach ($m in $script:matches) {
 if ($script:matches.Count -eq 0) { exit 3 }
 
 if ($Mode -eq "auto" -and $script:matches.Count -eq 1) {
-  $ok = Raise-Window ($script:matches[0].H)
+  $strategy = Raise-Window ($script:matches[0].H)
   Write-Output ("raised=" + [int64]$script:matches[0].H)
-  Write-Output ("foreground=" + $ok)
-  if ($ok) { exit 0 } else { exit 1 }
+  Write-Output ("strategy=" + $strategy)
+  Write-Output ("foreground=" + [bool]$strategy)
+  if ($strategy) { exit 0 } else { exit 1 }
 }
 
-# Ambiguous (or list mode): caller decides.
 exit 0

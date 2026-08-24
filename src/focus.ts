@@ -57,7 +57,11 @@ export async function raiseWindow(deps: FocusDeps): Promise<void> {
 
   const first = await run(deps, ["-Mode", "auto", "-TitleContains", titleHint]);
   if (first.raised) {
-    deps.log(`raised window (single match, foreground=${first.foreground})`);
+    if (first.foreground) {
+      deps.log(`raised window via ${first.strategy}`);
+    } else {
+      deps.log("Windows refused every raise strategy; the window stayed behind");
+    }
     return;
   }
   if (first.candidates.length === 0) {
@@ -117,7 +121,7 @@ function run(deps: FocusDeps, args: string[]): Promise<FocusResult> {
       (err, stdout, stderr) => {
         if (err && !stdout) {
           deps.log(`focus helper failed: ${err.message} ${(stderr ?? "").trim()}`);
-          resolve({ candidates: [], raised: false, foreground: false });
+          resolve({ candidates: [], raised: false, foreground: false, strategy: "" });
           return;
         }
         resolve(parseFocusOutput(stdout ?? ""));

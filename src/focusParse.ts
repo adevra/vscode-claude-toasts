@@ -9,6 +9,8 @@ export interface FocusResult {
   candidates: Candidate[];
   raised: boolean;
   foreground: boolean;
+  /** Which rung of the raise ladder Windows honored; empty if all were refused. */
+  strategy: string;
 }
 
 /** Parse the machine-readable output of focus-window.ps1. */
@@ -16,6 +18,7 @@ export function parseFocusOutput(stdout: string): FocusResult {
   const candidates: Candidate[] = [];
   let raised = false;
   let foreground = false;
+  let strategy = "";
   for (const line of stdout.split(/\r?\n/)) {
     const t = line.trim();
     if (t.startsWith("hwnd=")) {
@@ -30,9 +33,11 @@ export function parseFocusOutput(stdout: string): FocusResult {
       raised = true;
     } else if (t.startsWith("foreground=")) {
       foreground = t.endsWith("True");
+    } else if (t.startsWith("strategy=")) {
+      strategy = t.slice("strategy=".length);
     }
   }
-  return { candidates, raised, foreground };
+  return { candidates, raised, foreground, strategy };
 }
 
 /**
