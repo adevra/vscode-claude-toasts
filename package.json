@@ -2,7 +2,7 @@
   "name": "vscode-claude-toasts",
   "displayName": "Claude Code Toasts",
   "description": "Native desktop notifications when Claude Code finishes a turn or needs your input, driven by Claude Code hooks.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "publisher": "adev",
   "license": "MIT",
   "engines": {
