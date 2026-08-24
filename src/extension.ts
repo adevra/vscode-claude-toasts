@@ -30,10 +30,10 @@ const APP_DISPLAY_NAME = "Claude Code";
 const PERMISSION_WAIT_MS = 25000;
 const SETTINGS_PATH = path.join(os.homedir(), ".claude", "settings.json");
 
-let log!: vscode.OutputChannel;
+let log!: vscode.LogOutputChannel;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-  log = vscode.window.createOutputChannel("Claude Code Toasts");
+  log = vscode.window.createOutputChannel("Claude Code Toasts", { log: true });
   context.subscriptions.push(log);
 
   let cfg: ExtensionConfig = readConfig();
