@@ -15,6 +15,7 @@ function copyAssets() {
     ["media/hide-toast.ps1", "dist/hide-toast.ps1"],
     ["media/make-strips.ps1", "dist/make-strips.ps1"],
     ["media/session-window.ps1", "dist/session-window.ps1"],
+    ["media/ToastHost.cs", "dist/ToastHost.cs"],
     ["media/icon.png", "dist/icon.png"],
   ];
   for (const [from, to] of assets) {

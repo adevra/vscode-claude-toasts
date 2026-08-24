@@ -2,7 +2,7 @@
   "name": "vscode-claude-toasts",
   "displayName": "Claude Code Toasts",
   "description": "Native desktop notifications when Claude Code finishes a turn or needs your input, driven by Claude Code hooks.",
-  "version": "0.4.5",
+  "version": "0.5.0",
   "publisher": "adev",
   "license": "MIT",
   "engines": {
@@ -98,6 +98,11 @@
           "default": 10,
           "minimum": 1,
           "description": "Runaway backstop: never show more than this many toasts per minute."
+        },
+        "claudeToasts.replyBox": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a reply text box on completion and needs-input toasts. Typing there sends the text into the session's terminal. Uses a small helper process that runs only while a reply toast is recent."
         }
       }
     }

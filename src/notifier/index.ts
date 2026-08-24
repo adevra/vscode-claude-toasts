@@ -20,6 +20,8 @@ export interface ToastRequest {
   attribution?: string;
   /** Absolute path to a color-strip PNG rendered under the text; optional. */
   stripPath?: string;
+  /** When set, render a text box + Send button with this placeholder. */
+  replyPlaceholder?: string;
 }
 
 export interface Notifier {

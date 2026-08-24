@@ -3,6 +3,7 @@ import { MAX_MESSAGE_CHARS, PolicyConfig } from "./types";
 
 export interface ExtensionConfig extends PolicyConfig {
   sound: boolean;
+  replyBox: boolean;
 }
 
 const SECTION = "claudeToasts";
@@ -17,6 +18,7 @@ export function readConfig(): ExtensionConfig {
     suppressWhenActiveTerminal: c.get<boolean>("suppressWhenActiveTerminal", true),
     messagePreviewLength: clamp(c.get<number>("messagePreviewLength", 120), 0, MAX_MESSAGE_CHARS),
     sound: c.get<boolean>("sound", true),
+    replyBox: c.get<boolean>("replyBox", true),
     dedupWindowSeconds: Math.max(0, c.get<number>("dedupWindowSeconds", 5)),
     maxToastsPerMinute: Math.max(1, c.get<number>("maxToastsPerMinute", 10)),
   };

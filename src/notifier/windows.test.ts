@@ -44,6 +44,17 @@ describe("buildToastXml", () => {
     expect(xml).toContain('<image src="file:///C:/store/strips/strip-red.png"/>');
   });
 
+  it("renders the reply input and Send button before other actions", () => {
+    const xml = buildToastXml(req({ replyPlaceholder: "Reply to Claude...", actions: [{ content: "Mute 30m", uri: "vscode://x/mute" }] }));
+    expect(xml).toContain('<input id="reply" type="text" placeHolderContent="Reply to Claude..."/>');
+    expect(xml).toContain('<action content="Send" activationType="foreground" arguments="action=reply" hint-inputId="reply"/>');
+    expect(xml.indexOf("Send")).toBeLessThan(xml.indexOf("Mute 30m"));
+  });
+
+  it("omits the reply input when no placeholder is set", () => {
+    expect(buildToastXml(req())).not.toContain("<input");
+  });
+
   it("xml-escapes the launch uri and text", () => {
     const xml = buildToastXml(req({ title: "a & b <c>", launchUri: "vscode://x/focus?session=a&b" }));
     expect(xml).toContain("a &amp; b &lt;c&gt;");

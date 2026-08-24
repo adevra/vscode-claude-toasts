@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.5.0
+
+- **Reply box.** Completion and needs-input toasts now carry a text box and a
+  Send button; what you type is sent straight into the session's terminal.
+  Windows only delivers typed toast text to the process that created the toast,
+  so a small helper (compiled on this machine from bundled C# source with the
+  csc.exe that ships with Windows - no binaries distributed) is spawned lazily
+  when a reply toast fires and exits after 5 idle minutes: zero steady-state
+  cost. Body clicks and Mute keep working through protocol activation even
+  after the helper exits; only the Send button needs it alive.
+- Reply boxes appear only for sessions with a VS Code terminal to type into;
+  permission toasts and external-terminal sessions never get one.
+- New setting claudeToasts.replyBox (default on).
+
 ## 0.4.5
 
 - Fix: clicking a toast while the VS Code window was MINIMIZED did nothing (the

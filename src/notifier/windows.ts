@@ -4,7 +4,8 @@ import * as path from "node:path";
 import { pathToFileURL } from "node:url";
 import { Notifier, NotifierDeps, ToastRequest } from "./index";
 
-const GROUP = "claude-toasts";
+export const TOAST_GROUP = "claude-toasts";
+const GROUP = TOAST_GROUP;
 const POWERSHELL = "powershell.exe";
 const SHOW_TIMEOUT_MS = 10_000;
 
@@ -65,7 +66,7 @@ export class WindowsNotifier implements Notifier {
   }
 }
 
-function shortTag(tag: string): string {
+export function shortTag(tag: string): string {
   return createHash("sha1").update(tag).digest("hex").slice(0, 16);
 }
 
@@ -84,17 +85,17 @@ export function buildToastXml(req: ToastRequest): string {
   const audio = req.sound ? "" : '\n  <audio silent="true"/>';
   const title = xmlEscape(req.title);
   const body = xmlEscape(req.body || " ");
-  const actions =
-    req.actions && req.actions.length > 0
-      ? "\n  <actions>\n" +
-        req.actions
-          .map(
-            (a) =>
-              `    <action content="${xmlEscape(a.content)}" activationType="protocol" arguments="${xmlEscape(a.uri)}"/>`,
-          )
-          .join("\n") +
-        "\n  </actions>"
-      : "";
+  const actionParts: string[] = [];
+  if (req.replyPlaceholder) {
+    actionParts.push(`    <input id="reply" type="text" placeHolderContent="${xmlEscape(req.replyPlaceholder)}"/>`);
+    actionParts.push(`    <action content="Send" activationType="foreground" arguments="action=reply" hint-inputId="reply"/>`);
+  }
+  for (const a of req.actions ?? []) {
+    actionParts.push(
+      `    <action content="${xmlEscape(a.content)}" activationType="protocol" arguments="${xmlEscape(a.uri)}"/>`,
+    );
+  }
+  const actions = actionParts.length > 0 ? "\n  <actions>\n" + actionParts.join("\n") + "\n  </actions>" : "";
   const attribution = req.attribution
     ? `\n      <text placement="attribution">${xmlEscape(req.attribution)}</text>`
     : "";

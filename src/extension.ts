@@ -19,6 +19,8 @@ import { createNotifier } from "./notifier/factory";
 import { Notifier } from "./notifier/index";
 import { evaluateEvent, evaluatePermissionRequest, ToastGate } from "./notificationPolicy";
 import { MuteStore } from "./muteStore";
+import { ToastHost } from "./toastHost";
+import { buildToastXml, shortTag, TOAST_GROUP } from "./notifier/windows";
 import { findRepoInfo, PALETTE, resolveAccentColor, SessionColorReader } from "./sessionMeta";
 import { SessionRegistry } from "./sessionRegistry";
 import { StatusBar } from "./statusBar";
@@ -43,6 +45,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const colorReader = new SessionColorReader();
   const pendingPermissions = new Map<string, { respond: Respond; timer: NodeJS.Timeout; tag?: string }>();
   let permissionSeq = 0;
+  const pendingReplies = new Map<string, string>();
+  let replySeq = 0;
   const statusBar = new StatusBar(registry);
   context.subscriptions.push(statusBar);
 
@@ -96,6 +100,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     log.appendLine(`pruned ${pruned} dead window entr${pruned === 1 ? "y" : "ies"}`);
   }
   ensureColorStrips(storageDir);
+  const toastHost = new ToastHost({
+    assetDir,
+    storageDir,
+    appId: APP_ID,
+    onActivated: (id, args, reply) => handleHostActivation(id, args, reply),
+    log: (m) => log.appendLine(m),
+  });
+  context.subscriptions.push({ dispose: () => toastHost.dispose() });
   const liveFile = writeLiveEntry(storageDir, {
     pipe: server.pipePath,
     token: server.token,
@@ -317,6 +329,47 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
   }
 
+  function handleHostActivation(id: string, args: string, reply: string): void {
+    const sessionId = pendingReplies.get(id);
+    if (!sessionId) {
+      log.appendLine(`[reply] activation for unknown toast ${id}`);
+      return;
+    }
+    if (!args.includes("action=reply") || !reply) {
+      log.appendLine(`[reply] toast ${id} activated without text; ignoring`);
+      return;
+    }
+    pendingReplies.delete(id);
+    const info = registry.list().find((s) => s.sessionId === sessionId);
+    if (!info?.terminal) {
+      log.appendLine(`[reply] session ${sessionId.slice(0, 8)} has no terminal to type into`);
+      vscode.window.showWarningMessage("Claude Toasts: that session's terminal is gone; reply not delivered.");
+      return;
+    }
+    info.terminal.show(false);
+    info.terminal.sendText(reply, true);
+    log.appendLine(`[reply] sent ${reply.length} chars into session ${sessionId.slice(0, 8)}`);
+  }
+
+  /**
+   * Reply-capable toasts must be created by a live process to receive typed
+   * text, so they go through the toast host; everything else uses the one-shot
+   * notifier. Falls back to the notifier when the host is unavailable.
+   */
+  async function showToast(req: import("./notifier/index").ToastRequest, sessionId: string, canReply: boolean): Promise<void> {
+    if (canReply && cfg.replyBox) {
+      const id = `r${++replySeq}`;
+      const withReply = { ...req, replyPlaceholder: "Reply to Claude..." };
+      const xml = buildToastXml(withReply);
+      if (await toastHost.show(id, shortTag(req.tag), TOAST_GROUP, xml)) {
+        pendingReplies.set(id, sessionId);
+        return;
+      }
+      log.appendLine("[reply] host unavailable; showing plain toast");
+    }
+    await notifier.show(req);
+  }
+
   function buildContext(
     ev: HookEvent,
     info: {
@@ -394,19 +447,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
 
     const launchUri = await buildLaunchUri(sid);
-    await notifier.show({
-      kind: decision.kind,
-      title: decision.title,
-      body: decision.body,
-      urgency: decision.urgency,
-      sticky: decision.sticky,
-      sound: cfg.sound,
-      tag: decision.dedupKey,
-      launchUri,
-      actions: muteActions(sid),
-      attribution: decision.attribution,
-      stripPath: stripPathFor(context, decision.accentColor),
-    });
+    const canReply = !!info.terminal && !info.externalHwnd;
+    await showToast(
+      {
+        kind: decision.kind,
+        title: decision.title,
+        body: decision.body,
+        urgency: decision.urgency,
+        sticky: decision.sticky,
+        sound: cfg.sound,
+        tag: decision.dedupKey,
+        launchUri,
+        actions: muteActions(sid),
+        attribution: decision.attribution,
+        stripPath: stripPathFor(context, decision.accentColor),
+      },
+      sid,
+      canReply,
+    );
     if (decision.kind === "complete") {
       registry.markCompletedToastShown(sid);
     }
