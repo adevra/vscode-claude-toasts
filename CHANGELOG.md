@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.5.1
+
+- New icon (user-supplied) and a rewritten README covering the full feature set.
+
 ## 0.5.0
 
 - **Reply box.** Completion and needs-input toasts now carry a text box and a
