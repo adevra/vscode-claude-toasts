@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.2
+
+- Each rung of the window-raise ladder is now individually verified; a -StartAt
+  switch lets the fallbacks be exercised directly, since they otherwise only run
+  during the failure they exist to fix. altkey, locktimeout, topmost and
+  minimizerestore each raise the window on their own.
+
 ## 0.2.1
 
 - Fix: clicking a toast found the right window but Windows refused to raise it.

@@ -2,7 +2,10 @@ param(
   [ValidateSet("auto", "list", "raise")][string]$Mode = "auto",
   [string]$TitleContains = "",
   [string]$Hwnd = "",
-  [string]$ProcessName = "Code"
+  [string]$ProcessName = "Code",
+  # Testing aid: skip the earlier rungs so the fallbacks can be exercised
+  # directly. Production always starts at 1.
+  [int]$StartAt = 1
 )
 
 # Raise a specific VS Code window to the foreground.
@@ -80,14 +83,19 @@ function Raise-Window([IntPtr]$h) {
   else { [void][CtWin]::ShowWindow($h, $SW_SHOW) }
 
   # 1. The polite call. Works when we happen to hold foreground rights.
-  [void][CtWin]::SetForegroundWindow($h)
-  if (Test-Foreground $h) { return "setforeground" }
+  if ($StartAt -le 1) {
+    [void][CtWin]::SetForegroundWindow($h)
+    if (Test-Foreground $h) { return "setforeground" }
+  }
 
   # 2. Shell's own switcher; often bypasses the lock.
-  [void][CtWin]::SwitchToThisWindow($h, $true)
-  if (Test-Foreground $h) { return "switchtothiswindow" }
+  if ($StartAt -le 2) {
+    [void][CtWin]::SwitchToThisWindow($h, $true)
+    if (Test-Foreground $h) { return "switchtothiswindow" }
+  }
 
   # 3. Borrow the foreground thread's input queue, then activate.
+  if ($StartAt -le 3) {
   $fg = [CtWin]::GetForegroundWindow()
   if ($fg -ne [IntPtr]::Zero) {
     $fgPid = [uint32]0
@@ -103,17 +111,20 @@ function Raise-Window([IntPtr]$h) {
       if (Test-Foreground $h) { return "attachthreadinput" }
     }
   }
+  }
 
   # 4. Synthetic ALT tap. Any input event resets the foreground lock, which is the
   #    long-standing workaround for exactly this restriction.
-  [CtWin]::keybd_event([byte]$VK_MENU, 0, 0, [UIntPtr]::Zero)
-  [CtWin]::keybd_event([byte]$VK_MENU, 0, $KEYEVENTF_KEYUP, [UIntPtr]::Zero)
-  [void][CtWin]::SetForegroundWindow($h)
-  if (Test-Foreground $h) { return "altkey" }
+  if ($StartAt -le 4) {
+    [CtWin]::keybd_event([byte]$VK_MENU, 0, 0, [UIntPtr]::Zero)
+    [CtWin]::keybd_event([byte]$VK_MENU, 0, $KEYEVENTF_KEYUP, [UIntPtr]::Zero)
+    [void][CtWin]::SetForegroundWindow($h)
+    if (Test-Foreground $h) { return "altkey" }
+  }
 
   # 5. Drop the system foreground-lock timeout, activate, then put it back.
   $old = [uint32]0
-  if ([CtWin]::SystemParametersInfo($SPI_GETFOREGROUNDLOCKTIMEOUT, 0, [ref]$old, 0)) {
+  if ($StartAt -le 5 -and [CtWin]::SystemParametersInfo($SPI_GETFOREGROUNDLOCKTIMEOUT, 0, [ref]$old, 0)) {
     $zero = [uint32]0
     [void][CtWin]::SystemParametersInfo($SPI_SETFOREGROUNDLOCKTIMEOUT, 0, [ref]$zero, $SPIF_SENDCHANGE)
     [void][CtWin]::SetForegroundWindow($h)
@@ -123,9 +134,11 @@ function Raise-Window([IntPtr]$h) {
   }
 
   # 6. Topmost flicker: at least lift it above everything visually.
+  if ($StartAt -le 6) {
   [void][CtWin]::SetWindowPos($h, $HWND_TOPMOST, 0, 0, 0, 0, $SWP_NOMOVE -bor $SWP_NOSIZE -bor $SWP_SHOWWINDOW)
   [void][CtWin]::SetWindowPos($h, $HWND_NOTOPMOST, 0, 0, 0, 0, $SWP_NOMOVE -bor $SWP_NOSIZE -bor $SWP_SHOWWINDOW)
   if (Test-Foreground $h) { return "topmost" }
+  }
 
   # 7. Last resort: a restore from minimized always activates.
   [void][CtWin]::ShowWindow($h, $SW_MINIMIZE)
