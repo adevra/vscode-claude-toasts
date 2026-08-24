@@ -1,0 +1,118 @@
+{
+  "name": "vscode-claude-toasts",
+  "displayName": "Claude Code Toasts",
+  "description": "Native desktop notifications when Claude Code finishes a turn or needs your input, driven by Claude Code hooks.",
+  "version": "0.1.0",
+  "publisher": "adev",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Notebooks",
+    "Other"
+  ],
+  "keywords": [
+    "claude",
+    "claude code",
+    "notifications",
+    "toast",
+    "terminal"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "claudeToasts.installHooks",
+        "title": "Claude Toasts: Install Hooks"
+      },
+      {
+        "command": "claudeToasts.removeHooks",
+        "title": "Claude Toasts: Remove Hooks"
+      },
+      {
+        "command": "claudeToasts.sendTestNotification",
+        "title": "Claude Toasts: Send Test Notification"
+      },
+      {
+        "command": "claudeToasts.showLog",
+        "title": "Claude Toasts: Show Log"
+      }
+    ],
+    "configuration": {
+      "title": "Claude Code Toasts",
+      "properties": {
+        "claudeToasts.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Master switch. When off, no toasts are shown."
+        },
+        "claudeToasts.notifyOnComplete": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a toast when Claude finishes a turn (Stop hook)."
+        },
+        "claudeToasts.notifyOnNeedsInput": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a toast when Claude is blocked waiting on you (permission prompt, idle, or needs input)."
+        },
+        "claudeToasts.minTurnDurationSeconds": {
+          "type": "number",
+          "default": 20,
+          "minimum": 0,
+          "description": "Do not show a completion toast for turns shorter than this many seconds."
+        },
+        "claudeToasts.suppressWhenActiveTerminal": {
+          "type": "boolean",
+          "default": true,
+          "description": "Stay quiet when the window is focused and you are already looking at the terminal running that session."
+        },
+        "claudeToasts.messagePreviewLength": {
+          "type": "number",
+          "default": 120,
+          "minimum": 0,
+          "maximum": 500,
+          "description": "How many characters of Claude's message to show in the toast body (max 500)."
+        },
+        "claudeToasts.sound": {
+          "type": "boolean",
+          "default": true,
+          "description": "Play the system notification sound with each toast."
+        },
+        "claudeToasts.dedupWindowSeconds": {
+          "type": "number",
+          "default": 5,
+          "minimum": 0,
+          "description": "Collapse repeat toasts for the same session and kind within this many seconds."
+        },
+        "claudeToasts.maxToastsPerMinute": {
+          "type": "number",
+          "default": 10,
+          "minimum": 1,
+          "description": "Runaway backstop: never show more than this many toasts per minute."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "node esbuild.js --production",
+    "watch": "node esbuild.js --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "package": "vsce package --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/vscode": "^1.90.0",
+    "@vscode/vsce": "^3.2.0",
+    "esbuild": "^0.23.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
+  }
+}
