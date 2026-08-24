@@ -13,6 +13,14 @@ export interface FocusDeps {
 
 const RAISE_TIMEOUT_MS = 5000;
 const FOCUS_CONFIRM_MS = 400;
+/**
+ * VS Code often raises itself while handling the vscode:// URI — the Code.exe
+ * spawned by the toast click carries foreground rights and hands them to the
+ * running window. That self-raise lands AFTER this handler starts, so raising
+ * immediately produces a visible double raise. Wait for it first; run the Win32
+ * ladder only if the window still isn't focused.
+ */
+const SELF_RAISE_WAIT_MS = 500;
 
 /**
  * Handle a toast click delivered as a vscode:// URI:
@@ -47,6 +55,10 @@ export async function raiseWindow(deps: FocusDeps): Promise<void> {
   }
   if (vscode.window.state.focused) {
     deps.log("window already focused; no raise needed");
+    return;
+  }
+  if (await confirmFocused(SELF_RAISE_WAIT_MS)) {
+    deps.log("window raised itself during URI activation; skipping the Win32 raise");
     return;
   }
   const titleHint = vscode.workspace.name;

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.1
+
+- Fix: clicking a toast raised the VS Code window twice. A focus trace showed
+  VS Code raising itself while handling the vscode:// URI (the spawned Code.exe
+  carries the toast click's foreground rights), after which the extension's Win32
+  raise ran anyway - its focus check fired before the self-raise landed. The
+  extension now waits up to 500ms for the self-raise and runs the Win32 ladder
+  only if the window is still unfocused.
+
 ## 0.3.0
 
 - Toasts now show the repository name and branch in the attribution line
